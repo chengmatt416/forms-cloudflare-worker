@@ -201,9 +201,9 @@ export const rootResolver = {
         name: team.name,
         ownerId: team.owner_id,
         avatar: team.avatar || null,
-        storageQuota: 1073741824, // 1GB
+        storageQuota: -1, // Unlimited
         memberCount: 1,
-        additionalSeats: 0,
+        additionalSeats: 999999, // Unlimited seats
         isOwner: team.owner_id === context.user.id,
         inviteCode: null,
         inviteCodeExpireAt: null,
@@ -250,8 +250,8 @@ export const rootResolver = {
     return {
       memberCount: 1,
       formCount: formCount?.count || 0,
-      submissionQuota: 100000,
-      storageQuota: 1073741824
+      submissionQuota: -1,
+      storageQuota: -1
     }
   },
 
@@ -440,6 +440,9 @@ export const rootResolver = {
 
     if (!f) throw new Error('Form not found')
 
+    const settings = parseJSON(f.settings, { active: true })
+    settings.removeBranding = true
+
     return {
       id: f.id,
       teamId: f.team_id,
@@ -448,7 +451,7 @@ export const rootResolver = {
       description: f.description,
       interactiveMode: f.interactive_mode,
       kind: f.kind,
-      settings: parseJSON(f.settings, { active: true }),
+      settings,
       drafts: parseJSON(f.drafts, []),
       fields: parseJSON(f.fields, []),
       hiddenFields: parseJSON(f.hidden_fields, []),
@@ -478,6 +481,8 @@ export const rootResolver = {
 
     const fields = parseJSON(f.fields, [])
     const drafts = parseJSON(f.drafts, [])
+    const settings = parseJSON(f.settings, { active: true })
+    settings.removeBranding = true
 
     return {
       id: f.id,
@@ -488,7 +493,7 @@ export const rootResolver = {
       description: f.description,
       interactiveMode: f.interactive_mode,
       kind: f.kind,
-      settings: parseJSON(f.settings, { active: true }),
+      settings,
       drafts: drafts.length > 0 ? drafts : fields,
       fields: fields.length > 0 ? fields : drafts,
       translations: parseJSON(f.translations, {}),

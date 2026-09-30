@@ -169,7 +169,7 @@ app.all('*', async c => {
     return c.html(html)
   }
 
-  return c.text('HeyForm Cloudflare Worker is running. Assets not bound.', 200)
+  return c.text('Cloudflare Worker is running. Assets not bound.', 200)
 })
 
 export default app

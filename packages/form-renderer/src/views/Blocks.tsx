@@ -274,7 +274,7 @@ export const Blocks = () => {
       title: t('Thank you!'),
       description: t('Thanks for completing this form. Now create your own form.'),
       properties: {
-        buttonText: t('Create a heyform')
+        buttonText: t('Create a form')
       }
     }
 

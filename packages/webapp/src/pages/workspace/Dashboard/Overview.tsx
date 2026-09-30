@@ -22,7 +22,7 @@ export default function Overview() {
   )
 
   return (
-    <div className="ml-6 mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="mt-4 ml-6 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
       {/* Forms */}
       <div className="hf-card p-5">
         <div className="hf-label-muted">{t('dashboard.forms')}</div>
@@ -41,7 +41,11 @@ export default function Overview() {
           className="mt-3 h-8 [&_[data-slot=skeleton]]:h-[1.875rem] [&_[data-slot=skeleton]]:w-2/5 [&_[data-slot=skeleton]]:sm:h-6"
           loading={loading || !data}
         >
-          <div className="mt-3 text-3xl/8 font-semibold sm:text-2xl/8">{data?.submissionQuota}</div>
+          <div className="mt-3 text-3xl/8 font-semibold sm:text-2xl/8">
+            {data?.submissionQuota === -1 || (data?.submissionQuota ?? 0) >= 99999
+              ? 'Unlimited'
+              : data?.submissionQuota}
+          </div>
         </Skeleton>
       </div>
 
@@ -66,7 +70,9 @@ export default function Overview() {
           loading={loading || !data}
         >
           <div className="mt-3 text-3xl/8 font-semibold sm:text-2xl/8">
-            {formatBytes(data?.storageQuota)}
+            {data?.storageQuota === -1 || (data?.storageQuota ?? 0) >= 1099511627776
+              ? 'Unlimited'
+              : formatBytes(data?.storageQuota)}
           </div>
         </Skeleton>
       </div>

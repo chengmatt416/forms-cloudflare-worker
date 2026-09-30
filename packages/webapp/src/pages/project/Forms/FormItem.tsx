@@ -58,11 +58,9 @@ const FormItemLink: FC<FormItemLinkProps> = ({
       title: t('form.suspend.headline'),
       description: t('form.suspend.subHeadline'),
       confirmProps: {
-        label: t('form.suspend.contactUs')
+        label: t('components.confirm', 'OK')
       },
-      onConfirm() {
-        window.location.href = 'https://heyform.net/f/E4MKK2hx'
-      }
+      onConfirm() {}
     })
   }
 

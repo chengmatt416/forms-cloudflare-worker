@@ -1,7 +1,6 @@
 import { FormStatusEnum } from '@heyform-inc/shared-types-enums'
-import { IconArrowUpRight } from '@tabler/icons-react'
 import { useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 
 import { FormService } from '@/services'
 import { useParam } from '@/utils'
@@ -31,23 +30,7 @@ export default function ProjectTrash() {
 
   return (
     <>
-      <p className="text-secondary my-4 text-sm">
-        <Trans
-          t={t}
-          i18nKey="project.trash.tip"
-          components={{
-            a: (
-              <a
-                className="hover:text-primary underline underline-offset-4"
-                href="https://docs.heyform.net/quickstart/how-to-retrieve-forms-from-trash"
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            ),
-            icon: <IconArrowUpRight className="inline h-4 w-4" stroke={1.5} />
-          }}
-        />
-      </p>
+      <p className="text-secondary my-4 text-sm">{t('project.trash.subHeadline')}</p>
 
       <Async
         fetch={fetch}

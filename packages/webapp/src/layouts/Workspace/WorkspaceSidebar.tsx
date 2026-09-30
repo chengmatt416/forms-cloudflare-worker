@@ -1,13 +1,6 @@
 import { Content, Description, Overlay, Portal, Root, Title } from '@radix-ui/react-dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import {
-  IconHome,
-  IconLocation,
-  IconPlus,
-  IconSearch,
-  IconSettings,
-  IconUsers
-} from '@tabler/icons-react'
+import { IconHome, IconPlus, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react'
 import { FC, ForwardRefExoticComponent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
@@ -18,7 +11,6 @@ import { helper } from '@heyform-inc/utils'
 import { Button, Tooltip } from '@/components'
 import { useAppStore, useModal, useWorkspaceStore } from '@/store'
 
-import ChangelogButton from './ChangelogButton'
 import ProjectItem from './ProjectItem'
 import WorkspaceAccount from './WorkspaceAccount'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
@@ -28,14 +20,6 @@ interface LinkProps {
   icon: ForwardRefExoticComponent<any>
   label: string
 }
-
-const RESOURCE_LINKS = [
-  {
-    icon: IconLocation,
-    title: 'workspace.sidebar.gettingStarted',
-    href: 'https://docs.heyform.net/quickstart/create-a-form'
-  }
-]
 
 const Link: FC<LinkProps> = ({ to, icon: Icon, label }) => {
   return (
@@ -133,25 +117,6 @@ const WorkspaceSidebarComponent = () => {
         </div>
 
         <div aria-hidden="true" className="mt-8 flex-1"></div>
-
-        <nav className="mt-8">
-          {RESOURCE_LINKS.map(row => (
-            <a
-              key={row.title}
-              href={row.href}
-              target="_blank"
-              rel="noreferrer"
-              className="hf-sidebar-link"
-              data-state="inactive"
-            >
-              <row.icon className="hf-sidebar-link-icon" />
-              <span className="truncate">{t(row.title)}</span>
-            </a>
-          ))}
-
-          {/* Changelog */}
-          <ChangelogButton />
-        </nav>
       </div>
 
       <WorkspaceAccount containerClassName="max-lg:hidden" />
@@ -166,7 +131,7 @@ export const WorkspaceSidebarModal = () => {
     <Root open={isOpen} onOpenChange={onOpenChange}>
       <Portal>
         <Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-10 bg-black/60" />
-        <Content className="bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-left-0 data-[state=open]:slide-in-from-left-[80%] border-accent-light fixed bottom-2 left-2 top-2 z-10 w-72 rounded-lg border shadow-sm duration-200">
+        <Content className="bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-left-0 data-[state=open]:slide-in-from-left-[80%] border-accent-light fixed top-2 bottom-2 left-2 z-10 w-72 rounded-lg border shadow-sm duration-200">
           <Title>
             <VisuallyHidden />
           </Title>
