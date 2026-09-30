@@ -95,7 +95,7 @@ export const rootResolver = {
     await context.env.DB.prepare(
       'INSERT INTO projects (id, team_id, name, owner_id, created_at) VALUES (?, ?, ?, ?, ?)'
     )
-      .bind(projectId, 'My Project', userId, now)
+      .bind(projectId, teamId, 'My Project', userId, now)
       .run()
 
     // Set session cookie

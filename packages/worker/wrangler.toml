@@ -13,7 +13,7 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "heyform-db"
-database_id = "local-heyform-db"
+database_id = "55bb9dd8-18f2-426c-868f-b49087440ffb"
 
 # Optional Cloudflare R2 Bucket for file uploads
 # [[r2_buckets]]
@@ -21,5 +21,5 @@ database_id = "local-heyform-db"
 # bucket_name = "heyform-uploads"
 
 [vars]
-SESSION_SECRET = "heyform_super_secret_session_key_min_32_chars"
+SESSION_SECRET = "9f8e43cb12a5df6790b4e28c31d57e84ab6123cd48ef01923a756b1049c8321e"
 APP_DISABLE_REGISTRATION = "false"
