@@ -133,21 +133,33 @@ app.get('/api/file/:key', async c => {
 
 // Static assets / SPA fallback for the webapp
 app.all('*', async c => {
-  // If ASSETS binding exists (when deployed with assets directory configured)
   if (c.env.ASSETS) {
     const url = new URL(c.req.url)
-    const assetResponse = await c.env.ASSETS.fetch(c.req.raw)
+    const pathname = url.pathname
 
-    // If file found (CSS, JS, images, etc.), return it
-    if (assetResponse.status !== 404) {
-      return assetResponse
+    // If it's a static file request (has file extension), serve asset directly
+    const hasExtension = /\.[a-zA-Z0-9]+$/.test(pathname)
+    if (hasExtension) {
+      return await c.env.ASSETS.fetch(c.req.raw)
     }
 
-    // For SPA client-side routes (e.g. /login, /dashboard, /form/:formId), return index.html
+    // For HTML / SPA page requests, load index.html and inject runtime config
     const indexUrl = new URL('/index.html', url.origin)
     const indexRequest = new Request(indexUrl.toString(), c.req.raw)
     const indexResponse = await c.env.ASSETS.fetch(indexRequest)
-    return indexResponse
+    let html = await indexResponse.text()
+
+    const runtimeScript = `<script>
+      window.heyform = Object.assign(window.heyform || {}, {
+        homepageURL: "${url.origin}",
+        websiteURL: "${url.origin}",
+        appDisableRegistration: ${c.env.APP_DISABLE_REGISTRATION === 'true'},
+        enableGoogleFonts: true
+      });
+    </script>`
+
+    html = html.replace('</head>', `${runtimeScript}</head>`)
+    return c.html(html)
   }
 
   return c.text('HeyForm Cloudflare Worker is running. Assets not bound.', 200)

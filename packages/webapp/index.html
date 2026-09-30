@@ -32,6 +32,8 @@
 				windowHeight: window.innerHeight,
 				screenHeight: window.screen.height
 			};
+			heyform.homepageURL = heyform.homepageURL || window.location.origin;
+			heyform.websiteURL = heyform.websiteURL || window.location.origin;
 
 			window.heyform = heyform;
 		})()

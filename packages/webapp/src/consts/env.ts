@@ -6,14 +6,16 @@ export const LOCALE_COOKIE_NAME = 'HEYFORM_LOCALE'
 export const REDIRECT_COOKIE_NAME = 'HEYFORM_REDIRECT'
 export const INVITATION_COOKIE_NAME = 'HEYFORM_INVITATION'
 
+const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
 export const HOMEPAGE_URL =
-  window.heyform?.homepageURL || (import.meta.env.VITE_DASHBOARD_URL as string)
+  window.heyform?.homepageURL || (import.meta.env.VITE_DASHBOARD_URL as string) || origin
 export const DASHBOARD_URL = HOMEPAGE_URL
 export const WEBSITE_URL =
-  window.heyform?.websiteURL || (import.meta.env.VITE_HOMEPAGE_URL as string)
+  window.heyform?.websiteURL || (import.meta.env.VITE_HOMEPAGE_URL as string) || origin
 
-export const GRAPHQL_API_URL = import.meta.env.VITE_GRAPHQL_API_URL as string
-export const CDN_UPLOAD_URL = import.meta.env.VITE_CDN_UPLOAD_URL as string
+export const GRAPHQL_API_URL = (import.meta.env.VITE_GRAPHQL_API_URL as string) || '/graphql'
+export const CDN_UPLOAD_URL = (import.meta.env.VITE_CDN_UPLOAD_URL as string) || '/api'
 
 export const COOKIE_DOMAIN =
   window.heyform?.cookieDomain || (import.meta.env.VITE_COOKIE_DOMAIN as string)

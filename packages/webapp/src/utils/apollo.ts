@@ -81,15 +81,13 @@ const errorLink = onError(({ response }) => {
   }
 })
 
-const cache = new InMemoryCache({
-  addTypename: false
-})
+const cache = new InMemoryCache()
 
 window.__APOLLO_DEVTOOLS_GLOBAL_HOOK__ = true
 
 const client = new ApolloClient({
   link: from([retryLink, timeoutLink, headerLink, errorLink, httpLink]),
-  connectToDevTools: false,
+  devtools: { enabled: false },
   cache
 })
 
