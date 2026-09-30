@@ -158,6 +158,35 @@ export class FormService {
     })
   }
 
+  static async importFromJSON(projectId: string, jsonString: string): Promise<string> {
+    const data = JSON.parse(jsonString)
+    const name = data.name || 'Imported Form'
+    const formId = await FormService.create({
+      projectId,
+      name,
+      nameSchema: [],
+      interactiveMode: data.interactiveMode ?? InteractiveModeEnum.GENERAL,
+      kind: data.kind ?? FormKindEnum.SURVEY
+    })
+    const drafts = data.drafts || data.fields || []
+    if (drafts.length > 0) {
+      await FormService.updateFormSchemas({
+        formId,
+        drafts,
+        version: 1
+      })
+    }
+    if (data.themeSettings?.theme) {
+      await FormService.updateTheme({
+        formId,
+        theme: data.themeSettings.theme,
+        logo: data.themeSettings.logo,
+        favicon: data.themeSettings.favicon
+      })
+    }
+    return formId
+  }
+
   static async analytic(formId: string, range: string) {
     return apollo.query({
       query: FORM_ANALYTIC_GQL,

@@ -31,6 +31,10 @@ const Background: FC<BackgroundProps> = ({
   const { width, height } = resize
 
   const src = useMemo(() => {
+    if (String(rawSrc).startsWith('data:')) {
+      return rawSrc
+    }
+
     if (helper.isURL(rawSrc) && (helper.isNumber(width) || helper.isNumber(height))) {
       return getDecoratedURL(
         '/api/image',
@@ -45,7 +49,7 @@ const Background: FC<BackgroundProps> = ({
     return rawSrc
   }, [rawSrc, height, width])
 
-  const isImage = useMemo(() => helper.isURL(src), [src])
+  const isImage = useMemo(() => helper.isURL(src) || String(src).startsWith('data:'), [src])
 
   return (
     <Tag
@@ -61,7 +65,7 @@ const Background: FC<BackgroundProps> = ({
   )
 }
 
-const isURL = (url: string) => /^https?:\/\//i.test(url)
+const isURL = (url: string) => /^(https?:\/\/|data:image\/)/i.test(url)
 
 const ImageComponent: FC<ImageProps> = ({
   className,
@@ -77,6 +81,10 @@ const ImageComponent: FC<ImageProps> = ({
   const src = useMemo(() => {
     if (!isURL(rawSrc as string)) {
       return
+    }
+
+    if (String(rawSrc).startsWith('data:')) {
+      return rawSrc
     }
 
     if (helper.isNumber(width) || helper.isNumber(height)) {

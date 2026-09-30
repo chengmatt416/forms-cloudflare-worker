@@ -116,6 +116,33 @@ export const typeDefs = `
     enableEmailNotification: Boolean
   }
 
+  type FormField {
+    id: String!
+    title: JSON
+    titleSchema: JSON
+    description: JSON
+    kind: String
+    validations: JSON
+    properties: JSON
+    layout: JSON
+  }
+
+  type HiddenField {
+    id: String!
+    name: String!
+  }
+
+  type ThemeSettings {
+    logo: String
+    favicon: String
+    theme: JSON
+  }
+
+  type StripeAccount {
+    accountId: String
+    email: String
+  }
+
   type FormListItem {
     id: String!
     teamId: String!
@@ -171,14 +198,15 @@ export const typeDefs = `
     description: String
     interactiveMode: String
     kind: String
+    stripeAccount: StripeAccount
     settings: FormSettings
-    drafts: [JSON]
-    fields: [JSON]
-    hiddenFields: [JSON]
+    drafts: [FormField!]
+    fields: [FormField!]
+    hiddenFields: [HiddenField!]
     translations: JSON
     logics: [JSON]
     variables: [JSON]
-    themeSettings: JSON
+    themeSettings: ThemeSettings
     retentionAt: Float
     suspended: Boolean
     version: Int
@@ -200,15 +228,16 @@ export const typeDefs = `
     description: String
     interactiveMode: String
     kind: String
+    stripeAccount: StripeAccount
     settings: FormSettings
-    drafts: [JSON]
-    fields: [JSON]
+    drafts: [FormField!]
+    fields: [FormField!]
     translations: JSON
-    hiddenFields: [JSON]
+    hiddenFields: [HiddenField!]
     logics: [JSON]
     variables: [JSON]
     fieldsUpdatedAt: Float
-    themeSettings: JSON
+    themeSettings: ThemeSettings
     retentionAt: Float
     suspended: Boolean
     isDraft: Boolean
@@ -221,7 +250,7 @@ export const typeDefs = `
 
   type UpdateFormSchemasOutput {
     version: Int
-    drafts: [JSON]
+    drafts: [FormField!]
     canPublish: Boolean
   }
 
@@ -284,10 +313,13 @@ export const typeDefs = `
 
   type TemplateItem {
     id: String!
+    recordId: String
     name: String!
     category: String
-    fields: [JSON]
-    themeSettings: JSON
+    thumbnail: String
+    description: String
+    fields: [FormField!]
+    themeSettings: ThemeSettings
   }
 
   type CdnToken {
@@ -356,9 +388,25 @@ export const typeDefs = `
   }
 
   input CreateFormInput {
-    projectId: String!
+    projectId: String
     name: String
     interactiveMode: String
+  }
+
+  input TemplateDetailInput {
+    templateId: String!
+  }
+
+  input UseTemplateInput {
+    projectId: String
+    templateId: String!
+    recordId: String
+  }
+
+  input CreateFormWithAIInput {
+    projectId: String
+    topic: String!
+    reference: String
   }
 
   input UpdateFormInput {
@@ -462,6 +510,7 @@ export const typeDefs = `
     formReport(input: FormReportInput!): FormReport
     formAnalytic(input: FormAnalyticInput!): FormAnalytic
     templates: [TemplateItem!]!
+    templateDetail(input: TemplateDetailInput!): TemplateItem
     userCdnToken(input: CdnTokenInput!): CdnToken
     activationCodes: [ActivationCode!]!
   }
@@ -474,6 +523,9 @@ export const typeDefs = `
     renameProject(input: RenameProjectInput!): Boolean!
     deleteProject(input: DeleteProjectInput!): Boolean!
     createForm(input: CreateFormInput!): String!
+    useTemplate(input: UseTemplateInput!): String!
+    createFormWithAI(input: CreateFormWithAIInput!): String!
+    createWithAI(input: CreateFormWithAIInput!): String!
     updateForm(input: UpdateFormInput!): Boolean!
     updateFormSchemas(input: UpdateFormSchemasInput!): UpdateFormSchemasOutput!
     publishForm(input: UpdateFormSchemasInput!): Boolean!

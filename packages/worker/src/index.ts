@@ -138,6 +138,15 @@ app.get('/api/file/:key', async c => {
   })
 })
 
+// Image proxy/resizer endpoint
+app.get('/api/image', async c => {
+  const targetUrl = c.req.query('url')
+  if (!targetUrl) {
+    return c.text('Missing url parameter', 400)
+  }
+  return c.redirect(targetUrl, 302)
+})
+
 // Static assets / SPA fallback for the webapp
 app.all('*', async c => {
   if (c.env.ASSETS) {

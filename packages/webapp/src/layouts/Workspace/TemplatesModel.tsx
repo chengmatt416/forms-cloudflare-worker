@@ -11,7 +11,7 @@ import { slugify } from '@heyform-inc/utils'
 
 import { Async, Button, Image, Loader, Tabs, useToast } from '@/components'
 import { TEMPLATE_CATEGORIES } from '@/consts'
-import { useAppStore } from '@/store'
+import { useAppStore, useWorkspaceStore } from '@/store'
 import { TemplateGroupType, TemplateType } from '@/types'
 
 export interface TemplatesModelProps {
@@ -28,9 +28,14 @@ const TemplatePreview: FC<TemplatePreviewProps> = ({ template: rawTemplate, onBa
   const router = useRouter()
   const { workspaceId, projectId } = useParam()
   const { closeModal } = useAppStore()
+  const { workspace, project } = useWorkspaceStore()
+  const toast = useToast()
 
   const [platform, setPlatform] = useState('mobile')
   const [template, setTemplate] = useState<TemplateType>()
+
+  const targetProjectId = projectId || project?.id || workspace?.projects?.[0]?.id
+  const targetWorkspaceId = workspaceId || workspace?.id
 
   const tabs = useMemo(
     () => [
@@ -48,17 +53,33 @@ const TemplatePreview: FC<TemplatePreviewProps> = ({ template: rawTemplate, onBa
 
   const { loading, run } = useRequest(
     async () => {
-      const formId = await FormService.useTemplate({
-        projectId,
-        templateId: rawTemplate.id,
-        recordId: rawTemplate.recordId as string
-      })
+      try {
+        const formId = await FormService.useTemplate({
+          projectId: targetProjectId,
+          templateId: rawTemplate.id,
+          recordId: (rawTemplate.recordId || rawTemplate.id) as string
+        })
 
-      closeModal('CreateFormModal')
-      router.push(`/workspace/${workspaceId}/project/${projectId}/form/${formId}/create`)
+        closeModal('CreateFormModal')
+        let finalProjectId = targetProjectId
+        let finalWorkspaceId = targetWorkspaceId
+        if (!finalProjectId || !finalWorkspaceId) {
+          const detail = await FormService.detail(formId)
+          finalProjectId = finalProjectId || detail?.projectId
+          finalWorkspaceId = finalWorkspaceId || detail?.teamId
+        }
+        router.push(
+          `/workspace/${finalWorkspaceId}/project/${finalProjectId}/form/${formId}/create`
+        )
+      } catch (err: any) {
+        toast({
+          title: t('components.error.title'),
+          message: err?.message || 'Failed to use template'
+        })
+      }
     },
     {
-      refreshDeps: [rawTemplate.id],
+      refreshDeps: [rawTemplate.id, targetProjectId, targetWorkspaceId],
       manual: true
     }
   )
@@ -147,8 +168,12 @@ export default function TemplatesModel({ onBack }: TemplatesModelProps) {
   const router = useRouter()
   const { workspaceId, projectId } = useParam()
   const { closeModal } = useAppStore()
+  const { workspace, project } = useWorkspaceStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
+
+  const targetProjectId = projectId || project?.id || workspace?.projects?.[0]?.id
+  const targetWorkspaceId = workspaceId || workspace?.id
 
   const [templateGroups, setTemplateGroups] = useState<TemplateGroupType[]>([])
   const [template, setTemplate] = useState<TemplateType>()
@@ -156,9 +181,18 @@ export default function TemplatesModel({ onBack }: TemplatesModelProps) {
   const { loading: importLoading, run: importForm } = useRequest(
     async (formJson: string) => {
       try {
-        const result = await FormService.importFromJSON(projectId, formJson)
+        const result = await FormService.importFromJSON(targetProjectId, formJson)
         closeModal('CreateFormModal')
-        router.push(`/workspace/${workspaceId}/project/${projectId}/form/${result}/create`)
+        let finalProjectId = targetProjectId
+        let finalWorkspaceId = targetWorkspaceId
+        if (!finalProjectId || !finalWorkspaceId) {
+          const detail = await FormService.detail(result)
+          finalProjectId = finalProjectId || detail?.projectId
+          finalWorkspaceId = finalWorkspaceId || detail?.teamId
+        }
+        router.push(
+          `/workspace/${finalWorkspaceId}/project/${finalProjectId}/form/${result}/create`
+        )
       } catch (error) {
         toast({
           title: t('components.error.title'),
@@ -204,13 +238,13 @@ export default function TemplatesModel({ onBack }: TemplatesModelProps) {
   async function fetch() {
     const result = await FormService.templates()
 
-    setTemplateGroups(
-      TEMPLATE_CATEGORIES.map((category, index) => ({
-        id: slugify(category),
-        category: t(`form.template.categories.${index}`),
-        templates: result.filter(row => row.category === category)
-      }))
-    )
+    const groups = TEMPLATE_CATEGORIES.map((category, index) => ({
+      id: slugify(category),
+      category: t(`form.template.categories.${index}`),
+      templates: (result || []).filter(row => row.category === category)
+    })).filter(g => g.templates.length > 0)
+
+    setTemplateGroups(groups)
 
     return true
   }
@@ -277,7 +311,7 @@ export default function TemplatesModel({ onBack }: TemplatesModelProps) {
         <div className="[&>div:first-of-type]:pt-0">
           {templateGroups.map(row => (
             <div key={row.id} id={row.id} className="pt-10">
-              <h3 className="text-primary text-balance text-sm/6 font-semibold">{row.category}</h3>
+              <h3 className="text-primary text-sm/6 font-semibold text-balance">{row.category}</h3>
               <ul className="min-w-[1500px]:bg-red mt-2 grid grid-cols-5 gap-5">
                 {row.templates.map(template => (
                   <li

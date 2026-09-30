@@ -327,7 +327,7 @@ async function runTests() {
 
     // Query public form
     const publicFormRes = await gql(
-      `query PublicForm($input: FormDetailInput!) { publicForm(input: $input) { id name fields } }`,
+      `query PublicForm($input: FormDetailInput!) { publicForm(input: $input) { id name fields { id kind title } } }`,
       { input: { formId: testFormId } }
     )
     const pubForm = publicFormRes.json?.data?.publicForm
@@ -405,6 +405,102 @@ async function runTests() {
     const fileRes = await fetch(`${BASE_URL}/api/file/${uploadData.key}`)
     const fetchedContent = await fileRes.text()
     assert(fileRes.status === 200 && fetchedContent === fileContent, 'Uploaded file retrieved and matches content exactly')
+  }
+
+  // 10. Templates & Scratch Form Creation
+  console.log('\n--- 10. Templates & Scratch Form Creation ---')
+  {
+    // Templates list
+    const templatesRes = await gql(
+      `query { templates { id recordId name category thumbnail } }`,
+      {},
+      adminCookies
+    )
+    const templatesList = templatesRes.json?.data?.templates || []
+    assert(templatesList.length >= 8, `Built-in templates catalog loaded with ${templatesList.length} templates`)
+    assert(templatesList.some(t => t.category === 'Feedback'), 'Includes Feedback category')
+    assert(templatesList.some(t => t.category === 'Contact'), 'Includes Contact category')
+    assert(templatesList.some(t => t.category === 'Event'), 'Includes Event category')
+    assert(templatesList.some(t => t.category === 'Survey'), 'Includes Survey category')
+
+    // Template Detail
+    const detailRes = await gql(
+      `query TemplateDetail($input: TemplateDetailInput!) {
+        templateDetail(input: $input) {
+          id
+          name
+          category
+          fields { id kind title description validations properties }
+          themeSettings {
+            logo
+            favicon
+            theme
+          }
+        }
+      }`,
+      { input: { templateId: 'csat-feedback' } },
+      adminCookies
+    )
+    const tDetail = detailRes.json?.data?.templateDetail
+    assert(tDetail?.id === 'csat-feedback', `Template detail fetched: ${tDetail?.name}`)
+    assert(Array.isArray(tDetail?.fields) && tDetail.fields.length >= 3, `Template has ${tDetail?.fields?.length} valid fields`)
+    assert(Boolean(tDetail?.themeSettings), 'Template has custom themeSettings')
+
+    // Use Template (Start from Template)
+    const useRes = await gql(
+      `mutation UseTemplate($input: UseTemplateInput!) {
+        useTemplate(input: $input)
+      }`,
+      { input: { projectId: testProjectId, templateId: 'csat-feedback' } },
+      adminCookies
+    )
+    const templatedFormId = useRes.json?.data?.useTemplate
+    assert(Boolean(templatedFormId), `Form created from template with ID: ${templatedFormId}`)
+
+    // Verify templated form drafts
+    const templatedFormRes = await gql(
+      `query FormDetail($input: FormDetailInput!) {
+        formDetail(input: $input) { id name drafts { id kind title } }
+      }`,
+      { input: { formId: templatedFormId } },
+      adminCookies
+    )
+    const templatedForm = templatedFormRes.json?.data?.formDetail
+    assert(templatedForm?.drafts?.length >= 3, `Templated form has ${templatedForm?.drafts?.length} drafts loaded`)
+
+    // Start from Scratch with initial drafts
+    const scratchRes = await gql(
+      `mutation CreateForm($input: CreateFormInput!) {
+        createForm(input: $input)
+      }`,
+      { input: { projectId: testProjectId, name: 'Scratch Blank Form' } },
+      adminCookies
+    )
+    const scratchFormId = scratchRes.json?.data?.createForm
+    assert(Boolean(scratchFormId), `Scratch form created with ID: ${scratchFormId}`)
+
+    const scratchDetailRes = await gql(
+      `query FormDetail($input: FormDetailInput!) {
+        formDetail(input: $input) { id name drafts { id kind title } }
+      }`,
+      { input: { formId: scratchFormId } },
+      adminCookies
+    )
+    const scratchForm = scratchDetailRes.json?.data?.formDetail
+    assert(scratchForm?.drafts?.length >= 2, `Scratch form initialized with ${scratchForm?.drafts?.length} drafts (first question + thank-you screen)`)
+    assert(scratchForm?.drafts?.some(d => d.kind === 'short_text'), 'Scratch form contains starting short_text question')
+    assert(scratchForm?.drafts?.some(d => d.kind === 'thank_you'), 'Scratch form contains thank_you screen')
+  }
+
+  // 11. Image Proxy / Resizer Endpoint
+  console.log('\n--- 11. Image Proxy / Resizer Endpoint ---')
+  {
+    const target = 'https://images.unsplash.com/photo-1646013532943-d5b86e8689b8'
+    const imgRes = await fetch(`${BASE_URL}/api/image?url=${encodeURIComponent(target)}`, {
+      redirect: 'manual'
+    })
+    assert(imgRes.status === 302, `GET /api/image returned HTTP 302 redirect`)
+    assert(imgRes.headers.get('location') === target, `Redirect location matches target image URL`)
   }
 
   console.log('\n=============================================')

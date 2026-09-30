@@ -1,5 +1,6 @@
 import { createSessionToken, hashPassword, verifyPassword } from '../auth'
 import { Env, FormRow, Project, SubmissionRow, Team, User } from '../types'
+import { BUILTIN_TEMPLATES } from './templates'
 
 export interface GraphQLContext {
   env: Env
@@ -18,6 +19,19 @@ function parseJSON<T>(val: string | null | undefined, fallback: T): T {
 
 function generateId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+}
+
+function normalizeField(f: any): any {
+  if (!f || typeof f !== 'object') return f
+  return {
+    ...f,
+    id: f.id || generateId(),
+    kind: f.kind || f.type || 'short_text',
+    title: f.title ?? null,
+    description: f.description ?? null,
+    validations: f.validations || {},
+    properties: f.properties || {}
+  }
 }
 
 function isUserAdmin(user: User | null): boolean {
@@ -397,15 +411,73 @@ export const rootResolver = {
 
   createForm: async ({ input }: any, context: GraphQLContext) => {
     if (!context.user) throw new Error('Unauthorized')
-    const project = await context.env.DB.prepare('SELECT team_id FROM projects WHERE id = ?')
-      .bind(input.projectId)
-      .first<{ team_id: string }>()
+    let project = null
+    if (input.projectId) {
+      project = await context.env.DB.prepare('SELECT id, team_id FROM projects WHERE id = ?')
+        .bind(input.projectId)
+        .first<{ id: string; team_id: string }>()
+    }
 
-    if (!project) throw new Error('Project not found')
+    if (!project) {
+      const member = await context.env.DB.prepare(
+        'SELECT team_id FROM team_members WHERE user_id = ? LIMIT 1'
+      )
+        .bind(context.user.id)
+        .first<{ team_id: string }>()
+      if (member) {
+        project = await context.env.DB.prepare(
+          'SELECT id, team_id FROM projects WHERE team_id = ? LIMIT 1'
+        )
+          .bind(member.team_id)
+          .first<{ id: string; team_id: string }>()
+        if (!project) {
+          const newProjectId = generateId()
+          await context.env.DB.prepare(
+            'INSERT INTO projects (id, team_id, name, owner_id, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind(newProjectId, member.team_id, 'My Forms', context.user.id, Date.now())
+            .run()
+          project = { id: newProjectId, team_id: member.team_id }
+        }
+      }
+    }
+
+    if (!project) throw new Error('Workspace not found')
 
     const id = generateId()
     const now = Date.now()
-    const defaultSettings = JSON.stringify({ active: true, allowArchive: true })
+    const defaultSettings = JSON.stringify({
+      active: true,
+      allowArchive: true,
+      enableQuestionList: true,
+      enableNavigationArrows: true
+    })
+
+    const initialDrafts = [
+      {
+        id: generateId(),
+        title: ['What is your question?'],
+        description: null,
+        kind: 'short_text',
+        validations: { required: false },
+        properties: {},
+        layout: {
+          mediaType: 'image',
+          mediaUrl:
+            'https://images.unsplash.com/photo-1646013532943-d5b86e8689b8?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1080&q=80',
+          align: 'split_right',
+          brightness: 0
+        }
+      },
+      {
+        id: generateId(),
+        title: ['Thank you!'],
+        description: ['Thanks for completing this form.'],
+        kind: 'thank_you',
+        validations: {},
+        properties: {}
+      }
+    ]
 
     await context.env.DB.prepare(
       `
@@ -413,17 +485,212 @@ export const rootResolver = {
         id, team_id, project_id, member_id, name, interactive_mode, kind,
         fields, drafts, settings, theme_settings, logics, variables, hidden_fields, translations,
         status, version, is_draft, can_publish, submission_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, '{}', '[]', '[]', '[]', '{}', 'normal', 1, 1, 1, 0, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, '{}', '[]', '[]', '[]', '{}', 'normal', 1, 1, 1, 0, ?, ?)
     `
     )
       .bind(
         id,
         project.team_id,
-        input.projectId,
+        project.id,
         context.user.id,
         input.name || 'Untitled Form',
         input.interactiveMode || 'default',
         'survey',
+        JSON.stringify(initialDrafts),
+        defaultSettings,
+        now,
+        now
+      )
+      .run()
+
+    return id
+  },
+
+  useTemplate: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const template = BUILTIN_TEMPLATES.find(
+      t => t.id === input.templateId || t.recordId === input.templateId || t.id === input.recordId
+    )
+    if (!template) throw new Error('Template not found')
+
+    let project = null
+    if (input.projectId) {
+      project = await context.env.DB.prepare('SELECT id, team_id FROM projects WHERE id = ?')
+        .bind(input.projectId)
+        .first<{ id: string; team_id: string }>()
+    }
+    if (!project) {
+      const member = await context.env.DB.prepare(
+        'SELECT team_id FROM team_members WHERE user_id = ? LIMIT 1'
+      )
+        .bind(context.user.id)
+        .first<{ team_id: string }>()
+      if (member) {
+        project = await context.env.DB.prepare(
+          'SELECT id, team_id FROM projects WHERE team_id = ? LIMIT 1'
+        )
+          .bind(member.team_id)
+          .first<{ id: string; team_id: string }>()
+        if (!project) {
+          const newProjectId = generateId()
+          await context.env.DB.prepare(
+            'INSERT INTO projects (id, team_id, name, owner_id, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind(newProjectId, member.team_id, 'My Forms', context.user.id, Date.now())
+            .run()
+          project = { id: newProjectId, team_id: member.team_id }
+        }
+      }
+    }
+    if (!project) throw new Error('Workspace not found')
+
+    const id = generateId()
+    const now = Date.now()
+    const defaultSettings = JSON.stringify({
+      active: true,
+      allowArchive: true,
+      enableQuestionList: true,
+      enableNavigationArrows: true
+    })
+
+    await context.env.DB.prepare(
+      `INSERT INTO forms (
+        id, team_id, project_id, member_id, name, interactive_mode, kind,
+        fields, drafts, settings, theme_settings, logics, variables, hidden_fields, translations,
+        status, version, is_draft, can_publish, submission_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, '[]', '[]', '[]', '{}', 'normal', 1, 1, 1, 0, ?, ?)`
+    )
+      .bind(
+        id,
+        project.team_id,
+        project.id,
+        context.user.id,
+        template.name,
+        template.interactiveMode || 'default',
+        template.kind || 'survey',
+        JSON.stringify(template.fields),
+        defaultSettings,
+        JSON.stringify(template.themeSettings || {}),
+        now,
+        now
+      )
+      .run()
+
+    return id
+  },
+
+  createFormWithAI: async ({ input }: any, context: GraphQLContext) => {
+    return rootResolver.createWithAI({ input }, context)
+  },
+
+  createWithAI: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    let project = null
+    if (input.projectId) {
+      project = await context.env.DB.prepare('SELECT id, team_id FROM projects WHERE id = ?')
+        .bind(input.projectId)
+        .first<{ id: string; team_id: string }>()
+    }
+    if (!project) {
+      const member = await context.env.DB.prepare(
+        'SELECT team_id FROM team_members WHERE user_id = ? LIMIT 1'
+      )
+        .bind(context.user.id)
+        .first<{ team_id: string }>()
+      if (member) {
+        project = await context.env.DB.prepare(
+          'SELECT id, team_id FROM projects WHERE team_id = ? LIMIT 1'
+        )
+          .bind(member.team_id)
+          .first<{ id: string; team_id: string }>()
+        if (!project) {
+          const newProjectId = generateId()
+          await context.env.DB.prepare(
+            'INSERT INTO projects (id, team_id, name, owner_id, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind(newProjectId, member.team_id, 'My Forms', context.user.id, Date.now())
+            .run()
+          project = { id: newProjectId, team_id: member.team_id }
+        }
+      }
+    }
+    if (!project) throw new Error('Workspace not found')
+
+    const topic = input.topic || 'Survey'
+    const id = generateId()
+    const now = Date.now()
+    const defaultSettings = JSON.stringify({
+      active: true,
+      allowArchive: true,
+      enableQuestionList: true,
+      enableNavigationArrows: true
+    })
+
+    const fields = [
+      {
+        id: generateId(),
+        title: [`Welcome to ${topic}`],
+        description: ['Please fill out the questions below.'],
+        kind: 'welcome',
+        validations: {},
+        properties: {}
+      },
+      {
+        id: generateId(),
+        title: ['What is your full name?'],
+        description: null,
+        kind: 'short_text',
+        validations: { required: true },
+        properties: {}
+      },
+      {
+        id: generateId(),
+        title: ['What is your email address?'],
+        description: null,
+        kind: 'email',
+        validations: { required: true },
+        properties: {}
+      },
+      {
+        id: generateId(),
+        title: [`How would you rate your interest in ${topic}?`],
+        description: null,
+        kind: 'rating',
+        validations: { required: false },
+        properties: { total: 5, shape: 'star' }
+      },
+      {
+        id: generateId(),
+        title: ['Do you have any comments or suggestions for us?'],
+        description: null,
+        kind: 'long_text',
+        validations: { required: false },
+        properties: {}
+      },
+      {
+        id: generateId(),
+        title: ['Thank you!'],
+        description: ['Your response has been submitted.'],
+        kind: 'thank_you',
+        validations: {},
+        properties: {}
+      }
+    ]
+
+    await context.env.DB.prepare(
+      `INSERT INTO forms (
+        id, team_id, project_id, member_id, name, interactive_mode, kind,
+        fields, drafts, settings, theme_settings, logics, variables, hidden_fields, translations,
+        status, version, is_draft, can_publish, submission_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'default', 'survey', '[]', ?, ?, '{}', '[]', '[]', '[]', '{}', 'normal', 1, 1, 1, 0, ?, ?)`
+    )
+      .bind(
+        id,
+        project.team_id,
+        project.id,
+        context.user.id,
+        topic,
+        JSON.stringify(fields),
         defaultSettings,
         now,
         now
@@ -440,8 +707,22 @@ export const rootResolver = {
 
     if (!f) throw new Error('Form not found')
 
-    const settings = parseJSON(f.settings, { active: true })
+    const settings = parseJSON<any>(f.settings, { active: true })
     settings.removeBranding = true
+
+    const rawHidden = parseJSON(f.hidden_fields, [])
+    const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
+      typeof h === 'string'
+        ? { id: h, name: h }
+        : { id: h.id || generateId(), name: h.name || h.id || '' }
+    )
+
+    const rawTheme = parseJSON<any>(f.theme_settings, {})
+    const themeSettings = {
+      logo: rawTheme?.logo || null,
+      favicon: rawTheme?.favicon || null,
+      theme: rawTheme?.theme || rawTheme || {}
+    }
 
     return {
       id: f.id,
@@ -451,14 +732,15 @@ export const rootResolver = {
       description: f.description,
       interactiveMode: f.interactive_mode,
       kind: f.kind,
+      stripeAccount: null,
       settings,
-      drafts: parseJSON(f.drafts, []),
-      fields: parseJSON(f.fields, []),
-      hiddenFields: parseJSON(f.hidden_fields, []),
+      drafts: (parseJSON<any[]>(f.drafts, []) || []).map(normalizeField),
+      fields: (parseJSON<any[]>(f.fields, []) || []).map(normalizeField),
+      hiddenFields,
       translations: parseJSON(f.translations, {}),
       logics: parseJSON(f.logics, []),
       variables: parseJSON(f.variables, []),
-      themeSettings: parseJSON(f.theme_settings, {}),
+      themeSettings,
       retentionAt: null,
       suspended: false,
       version: f.version,
@@ -479,10 +761,24 @@ export const rootResolver = {
 
     if (!f) throw new Error('Form not found')
 
-    const fields = parseJSON(f.fields, [])
-    const drafts = parseJSON(f.drafts, [])
-    const settings = parseJSON(f.settings, { active: true })
+    const fields = (parseJSON<any[]>(f.fields, []) || []).map(normalizeField)
+    const drafts = (parseJSON<any[]>(f.drafts, []) || []).map(normalizeField)
+    const settings = parseJSON<any>(f.settings, { active: true })
     settings.removeBranding = true
+
+    const rawHidden = parseJSON(f.hidden_fields, [])
+    const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
+      typeof h === 'string'
+        ? { id: h, name: h }
+        : { id: h.id || generateId(), name: h.name || h.id || '' }
+    )
+
+    const rawTheme = parseJSON<any>(f.theme_settings, {})
+    const themeSettings = {
+      logo: rawTheme?.logo || null,
+      favicon: rawTheme?.favicon || null,
+      theme: rawTheme?.theme || rawTheme || {}
+    }
 
     return {
       id: f.id,
@@ -493,15 +789,16 @@ export const rootResolver = {
       description: f.description,
       interactiveMode: f.interactive_mode,
       kind: f.kind,
+      stripeAccount: null,
       settings,
       drafts: drafts.length > 0 ? drafts : fields,
       fields: fields.length > 0 ? fields : drafts,
       translations: parseJSON(f.translations, {}),
-      hiddenFields: parseJSON(f.hidden_fields, []),
+      hiddenFields,
       logics: parseJSON(f.logics, []),
       variables: parseJSON(f.variables, []),
       fieldsUpdatedAt: f.updated_at,
-      themeSettings: parseJSON(f.theme_settings, {}),
+      themeSettings,
       retentionAt: null,
       suspended: false,
       isDraft: Boolean(f.is_draft),
@@ -801,7 +1098,42 @@ export const rootResolver = {
     }
   },
 
-  templates: async () => [],
+  templates: async () => {
+    return BUILTIN_TEMPLATES.map(t => ({
+      id: t.id,
+      recordId: t.recordId || t.id,
+      name: t.name,
+      category: t.category,
+      thumbnail: t.thumbnail,
+      description: t.description
+    }))
+  },
+
+  templateDetail: async ({ input }: any) => {
+    const template = BUILTIN_TEMPLATES.find(
+      t => t.id === input.templateId || t.recordId === input.templateId
+    )
+    if (!template) {
+      throw new Error('Template not found')
+    }
+    const rawTheme = template.themeSettings || {}
+    const themeSettings = {
+      logo: rawTheme?.logo || null,
+      favicon: rawTheme?.favicon || null,
+      theme: rawTheme?.theme || rawTheme || {}
+    }
+    return {
+      id: template.id,
+      recordId: template.recordId || template.id,
+      name: template.name,
+      category: template.category,
+      thumbnail: template.thumbnail,
+      description: template.description,
+      fields: template.fields,
+      themeSettings
+    }
+  },
+
   userCdnToken: async ({ input }: any) => ({
     urlPrefix: '/api/file/',
     token: 'token',

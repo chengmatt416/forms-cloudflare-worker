@@ -6,7 +6,8 @@ import { FormService } from '@/services'
 import { useParam, useRouter } from '@/utils'
 
 import IconAI from '@/assets/ai.svg?react'
-import { Button, Form, Input } from '@/components'
+import { Button, Form, Input, useToast } from '@/components'
+import { useAppStore, useWorkspaceStore } from '@/store'
 
 import { TemplatesModelProps } from './TemplatesModel'
 
@@ -15,7 +16,13 @@ export default function CreateWithAIModel({ onBack }: TemplatesModelProps) {
 
   const router = useRouter()
   const { workspaceId, projectId } = useParam()
+  const { closeModal } = useAppStore()
+  const { workspace, project } = useWorkspaceStore()
+  const toast = useToast()
   const [rcForm] = Form.useForm()
+
+  const targetProjectId = projectId || project?.id || workspace?.projects?.[0]?.id
+  const targetWorkspaceId = workspaceId || workspace?.id
 
   const examples = useMemo(
     () => Array.from({ length: 3 }).map((_, index) => t(`form.ai.topic.examples.${index}`)),
@@ -23,12 +30,27 @@ export default function CreateWithAIModel({ onBack }: TemplatesModelProps) {
   )
 
   async function fetch(values: any) {
-    const formId = await FormService.createWithAI({
-      projectId,
-      ...values
-    })
+    try {
+      const formId = await FormService.createWithAI({
+        projectId: targetProjectId,
+        ...values
+      })
 
-    router.push(`/workspace/${workspaceId}/project/${projectId}/form/${formId}/create`)
+      closeModal('CreateFormModal')
+      let finalProjectId = targetProjectId
+      let finalWorkspaceId = targetWorkspaceId
+      if (!finalProjectId || !finalWorkspaceId) {
+        const detail = await FormService.detail(formId)
+        finalProjectId = finalProjectId || detail?.projectId
+        finalWorkspaceId = finalWorkspaceId || detail?.teamId
+      }
+      router.push(`/workspace/${finalWorkspaceId}/project/${finalProjectId}/form/${formId}/create`)
+    } catch (err: any) {
+      toast({
+        title: t('components.error.title'),
+        message: err?.message || 'Failed to create form with AI'
+      })
+    }
   }
 
   return (

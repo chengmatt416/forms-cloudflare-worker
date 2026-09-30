@@ -8,8 +8,8 @@ import { FormService } from '@/services'
 import { useParam, useRouter } from '@/utils'
 
 import IconAI from '@/assets/ai.svg?react'
-import { Button, Modal } from '@/components'
-import { useAppStore, useModal } from '@/store'
+import { Button, Modal, useToast } from '@/components'
+import { useAppStore, useModal, useWorkspaceStore } from '@/store'
 
 import CreateWithAIModel from './CreateWithAIModel'
 import TemplatesModel from './TemplatesModel'
@@ -41,24 +41,45 @@ const CreateFormComponent = () => {
   const router = useRouter()
   const { workspaceId, projectId } = useParam()
   const { closeModal } = useAppStore()
+  const { workspace, project } = useWorkspaceStore()
+  const toast = useToast()
 
   const [activeName, setActiveName] = useState<string>()
 
+  const targetProjectId = projectId || project?.id || workspace?.projects?.[0]?.id
+  const targetWorkspaceId = workspaceId || workspace?.id
+
   const { loading, run } = useRequest(
     async () => {
-      const formId = await FormService.create({
-        projectId,
-        name: t('form.creation.defaultName'),
-        nameSchema: [],
-        interactiveMode: InteractiveModeEnum.GENERAL,
-        kind: FormKindEnum.SURVEY
-      })
+      try {
+        const formId = await FormService.create({
+          projectId: targetProjectId,
+          name: t('form.creation.defaultName'),
+          nameSchema: [],
+          interactiveMode: InteractiveModeEnum.GENERAL,
+          kind: FormKindEnum.SURVEY
+        })
 
-      closeModal('CreateFormModal')
-      router.push(`/workspace/${workspaceId}/project/${projectId}/form/${formId}/create`)
+        closeModal('CreateFormModal')
+        let finalProjectId = targetProjectId
+        let finalWorkspaceId = targetWorkspaceId
+        if (!finalProjectId || !finalWorkspaceId) {
+          const detail = await FormService.detail(formId)
+          finalProjectId = finalProjectId || detail?.projectId
+          finalWorkspaceId = finalWorkspaceId || detail?.teamId
+        }
+        router.push(
+          `/workspace/${finalWorkspaceId}/project/${finalProjectId}/form/${formId}/create`
+        )
+      } catch (err: any) {
+        toast({
+          title: t('components.error.title'),
+          message: err?.message || 'Failed to create form'
+        })
+      }
     },
     {
-      refreshDeps: [projectId, t],
+      refreshDeps: [targetProjectId, targetWorkspaceId, t],
       manual: true
     }
   )
@@ -90,7 +111,7 @@ const CreateFormComponent = () => {
   } else {
     return (
       <>
-        <h2 className="text-primary text-balance text-xl/6 font-semibold sm:text-lg/6">
+        <h2 className="text-primary text-xl/6 font-semibold text-balance sm:text-lg/6">
           {t('form.creation.headline')}
         </h2>
         <div className="mt-6 grid grid-cols-1 gap-4 sm:w-[42rem] sm:grid-cols-3">
