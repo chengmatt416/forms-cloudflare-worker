@@ -225,6 +225,21 @@ export const typeDefs = `
     canPublish: Boolean
   }
 
+  type TeamMember {
+    id: String!
+    name: String!
+    email: String!
+    avatar: String
+    role: String!
+    isOwner: Boolean!
+    lastSeenAt: Float
+  }
+
+  type SubmissionsOutput {
+    total: Int!
+    submissions: [SubmissionItem!]!
+  }
+
   type CompleteSubmissionOutput {
     clientSecret: String
   }
@@ -396,7 +411,7 @@ export const typeDefs = `
   input CompleteSubmissionInput {
     formId: String!
     contactId: String
-    openToken: String!
+    openToken: String
     passwordToken: String
     answers: JSON!
     hiddenFields: [JSON]
@@ -407,6 +422,7 @@ export const typeDefs = `
   input SubmissionsInput {
     formId: String!
     page: Int
+    limit: Int
     pageSize: Int
     category: String
   }
@@ -432,6 +448,7 @@ export const typeDefs = `
     login(input: LoginInput!): Boolean!
     userDetail: UserDetail
     teams: [Team!]!
+    teamMembers(input: TeamDetailInput!): [TeamMember!]!
     publicTeamDetail(input: PublicTeamDetailInput!): PublicTeamDetail
     teamOverview(input: TeamDetailInput!): TeamOverview
     teamRecentForms(input: RecentFormsInput!): [RecentForm!]!
@@ -440,7 +457,7 @@ export const typeDefs = `
     publicForm(input: FormDetailInput!): PublicForm
     openForm(input: OpenFormInput!): String!
     verifyFormPassword(input: VerifyPasswordInput!): String!
-    submissions(input: SubmissionsInput!): [SubmissionItem!]!
+    submissions(input: SubmissionsInput!): SubmissionsOutput!
     submissionDetail(input: SubmissionDetailInput!): SubmissionDetail
     formReport(input: FormReportInput!): FormReport
     formAnalytic(input: FormAnalyticInput!): FormAnalytic

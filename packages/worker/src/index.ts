@@ -118,13 +118,20 @@ app.get('/api/file/:key', async c => {
 
   const upload = await c.env.DB.prepare('SELECT * FROM uploads WHERE id = ?')
     .bind(key)
-    .first<{ mime_type: string; data: ArrayBuffer }>()
+    .first<{ mime_type: string; data: any }>()
 
   if (!upload) {
     return c.text('File not found', 404)
   }
 
-  return new Response(upload.data, {
+  const raw =
+    upload.data instanceof Uint8Array
+      ? upload.data
+      : upload.data instanceof ArrayBuffer
+        ? new Uint8Array(upload.data)
+        : new Uint8Array(upload.data as any)
+
+  return new Response(raw, {
     headers: {
       'Content-Type': upload.mime_type
     }

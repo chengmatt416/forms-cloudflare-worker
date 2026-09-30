@@ -308,9 +308,32 @@ export const rootResolver = {
     await context.env.DB.prepare(
       'UPDATE teams SET name = COALESCE(?, name), avatar = COALESCE(?, avatar) WHERE id = ?'
     )
-      .bind(input.name, input.avatar, input.teamId)
+      .bind(input.name ?? null, input.avatar ?? null, input.teamId)
       .run()
     return true
+  },
+
+  teamMembers: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const members = await context.env.DB.prepare(
+      `SELECT tm.id as member_id, tm.role, tm.user_id, u.name, u.email, u.avatar, t.owner_id
+       FROM team_members tm
+       JOIN users u ON u.id = tm.user_id
+       JOIN teams t ON t.id = tm.team_id
+       WHERE tm.team_id = ?`
+    )
+      .bind(input.teamId)
+      .all<any>()
+
+    return (members.results || []).map((m: any) => ({
+      id: m.member_id,
+      name: m.name,
+      email: m.email,
+      avatar: m.avatar || null,
+      role: m.role,
+      isOwner: m.user_id === m.owner_id,
+      lastSeenAt: null
+    }))
   },
 
   // ---------------- PROJECTS ----------------
@@ -560,9 +583,9 @@ export const rootResolver = {
     `
     )
       .bind(
-        input.name,
-        input.description,
-        input.interactiveMode,
+        input.name ?? null,
+        input.description ?? null,
+        input.interactiveMode ?? null,
         JSON.stringify(currentSettings),
         now,
         input.formId
@@ -628,10 +651,12 @@ export const rootResolver = {
 
   completeSubmission: async ({ input }: any, context: GraphQLContext) => {
     let startAt = Date.now()
-    try {
-      const decoded = JSON.parse(atob(input.openToken))
-      if (decoded.startAt) startAt = decoded.startAt
-    } catch {}
+    if (input.openToken) {
+      try {
+        const decoded = JSON.parse(atob(input.openToken))
+        if (decoded.startAt) startAt = decoded.startAt
+      } catch {}
+    }
 
     const submissionId = generateId()
     const now = Date.now()
@@ -666,18 +691,24 @@ export const rootResolver = {
 
   submissions: async ({ input }: any, context: GraphQLContext) => {
     const page = input.page || 1
-    const pageSize = input.pageSize || 20
-    const offset = (page - 1) * pageSize
+    const limit = input.limit || input.pageSize || 20
+    const offset = (page - 1) * limit
+
+    const countRes = await context.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM submissions WHERE form_id = ?'
+    )
+      .bind(input.formId)
+      .first<{ count: number }>()
 
     const subs = await context.env.DB.prepare(
       `
       SELECT * FROM submissions WHERE form_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?
     `
     )
-      .bind(input.formId, pageSize, offset)
+      .bind(input.formId, limit, offset)
       .all<SubmissionRow>()
 
-    return (subs.results || []).map(s => ({
+    const items = (subs.results || []).map(s => ({
       id: s.id,
       formId: s.form_id,
       category: s.category,
@@ -689,6 +720,11 @@ export const rootResolver = {
       endAt: s.end_at,
       createdAt: s.created_at
     }))
+
+    return {
+      total: countRes?.count || 0,
+      submissions: items
+    }
   },
 
   submissionDetail: async ({ input }: any, context: GraphQLContext) => {
