@@ -12,8 +12,11 @@
     "dev": "run-p dev:webapp dev:server",
     "dev:webapp": "pnpm --filter ./packages/webapp dev",
     "dev:server": "pnpm --filter ./packages/server dev",
+    "dev:worker": "pnpm --filter @heyform/worker dev",
     "build:server": "pnpm --filter ./packages/server build",
     "build:webapp": "pnpm --filter ./packages/webapp build",
+    "build:worker": "pnpm --filter @heyform/worker type-check",
+    "deploy:worker": "pnpm --filter ./packages/webapp build && pnpm --filter @heyform/worker deploy",
     "format": "prettier --write \"packages/**/*.{js,ts,tsx,css}\"",
     "lint": "node scripts/run-oxlint.js packages",
     "postinstall": "simple-git-hooks"
@@ -40,6 +43,15 @@
     "simple-git-hooks": "^2.13.0"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "bufferutil",
+      "esbuild",
+      "sharp",
+      "simple-git-hooks",
+      "utf-8-validate",
+      "workerd",
+      "bcrypt"
+    ],
     "neverBuiltDependencies": [],
     "overrides": {
       "apollo-upload-client": "17.0.0",

@@ -1,0 +1,25 @@
+name = "heyform"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static Assets: serves the HeyForm React webapp
+[assets]
+directory = "../webapp/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Cloudflare D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "heyform-db"
+database_id = "local-heyform-db"
+
+# Optional Cloudflare R2 Bucket for file uploads
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "heyform-uploads"
+
+[vars]
+SESSION_SECRET = "heyform_super_secret_session_key_min_32_chars"
+APP_DISABLE_REGISTRATION = "false"
