@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   avatar TEXT,
+  role TEXT NOT NULL DEFAULT 'user',
   created_at INTEGER NOT NULL
 );
 
@@ -86,5 +87,13 @@ CREATE TABLE IF NOT EXISTS uploads (
   mime_type TEXT NOT NULL,
   size INTEGER NOT NULL,
   data BLOB,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS activation_codes (
+  code TEXT PRIMARY KEY,
+  created_by TEXT NOT NULL,
+  used_by TEXT,
+  used_at INTEGER,
   created_at INTEGER NOT NULL
 );

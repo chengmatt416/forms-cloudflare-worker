@@ -20,6 +20,11 @@ function generateId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 16)
 }
 
+function isUserAdmin(user: User | null): boolean {
+  if (!user) return false
+  return user.email.toLowerCase() === 'pinyencheng@gmail.com' || user.role === 'admin'
+}
+
 export const rootResolver = {
   // ---------------- AUTH ----------------
   login: async ({ input }: any, context: GraphQLContext) => {
@@ -53,8 +58,25 @@ export const rootResolver = {
       throw new Error('Registration is currently disabled.')
     }
 
-    const { name, email, password } = input
+    const { name, email, password, inviteCode } = input
     const cleanEmail = email.toLowerCase().trim()
+    const isAdminUser = cleanEmail === 'pinyencheng@gmail.com'
+
+    // Require activation code for non-admins
+    if (!isAdminUser) {
+      if (!inviteCode || !inviteCode.trim()) {
+        throw new Error('An activation code is required for registration.')
+      }
+      const codeRow = await context.env.DB.prepare(
+        'SELECT * FROM activation_codes WHERE code = ? AND used_by IS NULL'
+      )
+        .bind(inviteCode.trim().toUpperCase())
+        .first<{ code: string }>()
+
+      if (!codeRow) {
+        throw new Error('Invalid or already used activation code.')
+      }
+    }
 
     const existing = await context.env.DB.prepare('SELECT id FROM users WHERE email = ?')
       .bind(cleanEmail)
@@ -67,13 +89,23 @@ export const rootResolver = {
     const userId = generateId()
     const passwordHash = await hashPassword(password)
     const now = Date.now()
+    const role = isAdminUser ? 'admin' : 'user'
 
     // Create user
     await context.env.DB.prepare(
-      'INSERT INTO users (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO users (id, name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     )
-      .bind(userId, name, cleanEmail, passwordHash, now)
+      .bind(userId, name, cleanEmail, passwordHash, role, now)
       .run()
+
+    // Mark activation code as used if provided
+    if (inviteCode && inviteCode.trim()) {
+      await context.env.DB.prepare(
+        'UPDATE activation_codes SET used_by = ?, used_at = ? WHERE code = ?'
+      )
+        .bind(cleanEmail, now, inviteCode.trim().toUpperCase())
+        .run()
+    }
 
     // Create default workspace / team
     const teamId = generateId()
@@ -110,12 +142,15 @@ export const rootResolver = {
 
   userDetail: async (_: any, context: GraphQLContext) => {
     if (!context.user) return null
+    const isAdmin = isUserAdmin(context.user)
     return {
       id: context.user.id,
       name: context.user.name,
       email: context.user.email,
       avatar: context.user.avatar || null,
       lang: 'en',
+      role: isAdmin ? 'admin' : context.user.role || 'user',
+      isAdmin,
       isEmailVerified: true,
       isSocialAccount: false,
       isDeletionScheduled: false,
@@ -730,5 +765,48 @@ export const rootResolver = {
     urlPrefix: '/api/file/',
     token: 'token',
     key: generateId()
-  })
+  }),
+
+  // ---------------- ACTIVATION CODES ----------------
+  activationCodes: async (_: any, context: GraphQLContext) => {
+    if (!isUserAdmin(context.user)) {
+      throw new Error('Only administrators can view activation codes.')
+    }
+    const rows = await context.env.DB.prepare(
+      'SELECT * FROM activation_codes ORDER BY created_at DESC'
+    ).all<any>()
+
+    return (rows.results || []).map((r: any) => ({
+      code: r.code,
+      createdBy: r.created_by,
+      usedBy: r.used_by || null,
+      usedAt: r.used_at || null,
+      createdAt: r.created_at
+    }))
+  },
+
+  generateActivationCode: async (_: any, context: GraphQLContext) => {
+    if (!isUserAdmin(context.user)) {
+      throw new Error('Only administrators can generate activation codes.')
+    }
+    const randomPart = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+    const code = `HEY-${randomPart}`
+    const now = Date.now()
+
+    await context.env.DB.prepare(
+      'INSERT INTO activation_codes (code, created_by, created_at) VALUES (?, ?, ?)'
+    )
+      .bind(code, context.user!.email, now)
+      .run()
+
+    return code
+  },
+
+  deleteActivationCode: async ({ code }: any, context: GraphQLContext) => {
+    if (!isUserAdmin(context.user)) {
+      throw new Error('Only administrators can manage activation codes.')
+    }
+    await context.env.DB.prepare('DELETE FROM activation_codes WHERE code = ?').bind(code).run()
+    return true
+  }
 }

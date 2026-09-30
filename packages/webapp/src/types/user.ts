@@ -7,6 +7,8 @@ export interface UserType {
   note: string
   lang?: string
   lastSeenAt?: number
+  role?: string
+  isAdmin?: boolean
   isSocialAccount?: boolean
   isEmailVerified?: boolean
   isDeletionScheduled?: boolean

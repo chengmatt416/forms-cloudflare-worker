@@ -10,10 +10,20 @@ export const typeDefs = `
     email: String!
     avatar: String
     lang: String
+    role: String
+    isAdmin: Boolean
     isEmailVerified: Boolean
     isSocialAccount: Boolean
     isDeletionScheduled: Boolean
     deletionScheduledAt: Float
+  }
+
+  type ActivationCode {
+    code: String!
+    createdBy: String!
+    usedBy: String
+    usedAt: Float
+    createdAt: Float!
   }
 
   type ProjectItem {
@@ -436,6 +446,7 @@ export const typeDefs = `
     formAnalytic(input: FormAnalyticInput!): FormAnalytic
     templates: [TemplateItem!]!
     userCdnToken(input: CdnTokenInput!): CdnToken
+    activationCodes: [ActivationCode!]!
   }
 
   type Mutation {
@@ -455,6 +466,8 @@ export const typeDefs = `
     updateFormVariables(input: UpdateFormVariablesInput!): Boolean!
     updateFormHiddenFields(input: UpdateHiddenFieldsInput!): Boolean!
     completeSubmission(input: CompleteSubmissionInput!): CompleteSubmissionOutput!
+    generateActivationCode: String!
+    deleteActivationCode(code: String!): Boolean!
   }
 `
 

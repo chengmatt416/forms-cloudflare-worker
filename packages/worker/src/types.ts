@@ -12,6 +12,15 @@ export interface User {
   email: string
   password_hash: string
   avatar?: string
+  role: string
+  created_at: number
+}
+
+export interface ActivationCode {
+  code: string
+  created_by: string
+  used_by?: string
+  used_at?: number
   created_at: number
 }
 

@@ -8,7 +8,6 @@ import { helper } from '@heyform-inc/utils'
 
 import { Form, Input, PasswordStrength } from '@/components'
 import { DISABLE_LOGIN_WITH_PASSWORD, REDIRECT_COOKIE_NAME } from '@/consts'
-import { useUserStore } from '@/store'
 
 import SocialLogin from './SocialLogin'
 
@@ -16,13 +15,14 @@ const SignUp = () => {
   const { t } = useTranslation()
 
   const router = useRouter()
-  const { setTemporaryEmail, setVerifyEmailSentAt } = useUserStore()
 
   const [isFocused, setIsFocused] = useState(false)
   const [password, setPassword] = useState<string>()
+  const [formValues, setFormValues] = useState<any>({})
 
   function handleValuesChange(_: any, values: any) {
     setPassword(values.password)
+    setFormValues(values)
   }
 
   async function fetch(values: any) {
@@ -33,9 +33,7 @@ const SignUp = () => {
 
     clearInvitationCookie()
     clearCookie(REDIRECT_COOKIE_NAME)
-    setTemporaryEmail(values.email)
-    setVerifyEmailSentAt(Date.now())
-    router.replace('/verify-email')
+    router.replace('/')
   }
 
   return (
@@ -111,6 +109,25 @@ const SignUp = () => {
             ]}
           >
             <Input.Password onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} />
+          </Form.Item>
+
+          <Form.Item
+            name="inviteCode"
+            label="Activation Code"
+            rules={[
+              {
+                validator: async (_, value) => {
+                  if (formValues?.email?.toLowerCase().trim() === 'pinyencheng@gmail.com') {
+                    return
+                  }
+                  if (!value || !value.trim()) {
+                    throw new Error('Activation code is required')
+                  }
+                }
+              }
+            ]}
+          >
+            <Input placeholder="HEY-XXXXXX" />
           </Form.Item>
         </Form.Simple>
       )}

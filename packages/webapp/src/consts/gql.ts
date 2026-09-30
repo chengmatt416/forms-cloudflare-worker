@@ -903,6 +903,8 @@ export const USER_DETAILS_GQL = gql`
       email
       avatar
       lang
+      role
+      isAdmin
       isEmailVerified
       isSocialAccount
       isDeletionScheduled
@@ -1473,5 +1475,29 @@ export const PUBLIC_FORM_GQL = gql`
 export const VERIFY_FORM_PASSWORD_GQL = gql`
   query verifyFormPassword($input: VerifyPasswordInput!) {
     verifyFormPassword(input: $input)
+  }
+`
+
+export const ACTIVATION_CODES_GQL = gql`
+  query activationCodes {
+    activationCodes {
+      code
+      createdBy
+      usedBy
+      usedAt
+      createdAt
+    }
+  }
+`
+
+export const GENERATE_ACTIVATION_CODE_GQL = gql`
+  mutation generateActivationCode {
+    generateActivationCode
+  }
+`
+
+export const DELETE_ACTIVATION_CODE_GQL = gql`
+  mutation deleteActivationCode($code: String!) {
+    deleteActivationCode(code: $code)
   }
 `

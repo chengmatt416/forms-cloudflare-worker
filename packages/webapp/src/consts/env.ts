@@ -28,20 +28,12 @@ export const GOOGLE_RECAPTCHA_KEY =
 export const DISABLE_LOGIN_WITH_PASSWORD = helper.isTrue(
   window.heyform?.disableLoginWithPassword || import.meta.env.VITE_DISABLE_LOGIN_WITH_PASSWORD
 )
-export const DISABLE_LOGIN_WITH_GOOGLE = helper.isTrue(
-  window.heyform?.disableLoginWithGoogle || import.meta.env.VITE_DISABLE_LOGIN_WITH_GOOGLE
-)
-export const DISABLE_LOGIN_WITH_APPLE = helper.isTrue(
-  window.heyform?.disableLoginWithApple || import.meta.env.VITE_DISABLE_LOGIN_WITH_APPLE
-)
-export const DISABLE_LOGIN_WITH_OIDC = helper.isTrue(
-  window.heyform?.disableLoginWithOidc ?? import.meta.env.VITE_DISABLE_LOGIN_WITH_OIDC ?? 'true'
-)
+export const DISABLE_LOGIN_WITH_GOOGLE = true
+export const DISABLE_LOGIN_WITH_APPLE = true
+export const DISABLE_LOGIN_WITH_OIDC = true
 export const OIDC_DISPLAY_NAME =
   window.heyform?.oidcDisplayName || (import.meta.env.VITE_OIDC_DISPLAY_NAME as string) || 'SSO'
-export const VERIFY_USER_EMAIL = helper.isTrue(
-  window.heyform?.verifyUserEmail || import.meta.env.VITE_VERIFY_USER_EMAIL
-)
+export const VERIFY_USER_EMAIL = false
 export const ENABLE_GOOGLE_FONTS = helper.isTrue(
   window.heyform?.enableGoogleFonts ?? import.meta.env.VITE_ENABLE_GOOGLE_FONTS ?? 'true'
 )

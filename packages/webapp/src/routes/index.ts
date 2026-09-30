@@ -67,11 +67,11 @@ const routes = [
   },
   {
     path: '/verify-email',
-    component: VerifyEmail,
+    component: () => createElement(Navigate, { to: '/', replace: true }),
     layout: BaseLayout,
     options: {
       title: 'verifyEmail.title',
-      loginRequired: true
+      loginRequired: false
     }
   },
   {

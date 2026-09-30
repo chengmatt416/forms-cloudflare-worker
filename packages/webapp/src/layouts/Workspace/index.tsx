@@ -16,6 +16,7 @@ import { useAppStore, useUserStore, useWorkspaceStore } from '@/store'
 
 import { FormShell } from '../Form/FormShell'
 import { ProjectShell } from '../Project/ProjectShell'
+import ActivationCodesModal from './ActivationCodesModal'
 import ChangePasswordModal from './ChangePasswordModal'
 import ChangelogsModal from './ChangelogsModal'
 import CreateFormModal from './CreateFormModal'
@@ -40,10 +41,6 @@ export const LoginGuard: FC<LayoutProps> = ({ options, children }) => {
     try {
       const user = await UserService.userDetail()
       setUser(user)
-
-      if (!user.isEmailVerified && window.location.pathname !== '/verify-email') {
-        return router.replace('/verify-email')
-      }
     } finally {
       setCheckingUser(false)
     }
@@ -201,6 +198,7 @@ export const WorkspaceGuard: FC<LayoutProps> = ({ options, children }) => {
       <UserDeletionModal />
       <ChangePasswordModal />
       <SearchModal />
+      <ActivationCodesModal />
     </LoginGuard>
   )
 }
@@ -236,6 +234,7 @@ export const BaseLayout: FC<LayoutProps> = ({ options, children }) => {
       <UserAccountModal />
       <UserDeletionModal />
       <ChangePasswordModal />
+      <ActivationCodesModal />
     </LoginGuard>
   )
 }

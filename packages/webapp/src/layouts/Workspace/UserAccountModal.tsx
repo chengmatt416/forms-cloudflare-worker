@@ -127,7 +127,7 @@ const UserAccount = () => {
       <section className="border-accent-light border-b pb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="md:max-w-sm">
-            <h3 className="text-sm font-medium leading-6">{t('user.avatar.headline')}</h3>
+            <h3 className="text-sm leading-6 font-medium">{t('user.avatar.headline')}</h3>
           </div>
           <div className="md:w-80">
             <p data-slot="text" className="text-secondary text-sm/5 sm:text-xs/5">
@@ -146,7 +146,7 @@ const UserAccount = () => {
       <section className="border-accent-light border-b pb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="md:max-w-sm">
-            <h3 className="text-sm font-medium leading-6">{t('user.name')}</h3>
+            <h3 className="text-sm leading-6 font-medium">{t('user.name')}</h3>
           </div>
           <div className="md:w-80">
             <Input id="name" value={user?.name} onChange={handleNameChange} />
@@ -157,7 +157,7 @@ const UserAccount = () => {
       <section className="border-accent-light border-b pb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="md:max-w-sm">
-            <h3 className="text-sm font-medium leading-6">{t('user.email.headline')}</h3>
+            <h3 className="text-sm leading-6 font-medium">{t('user.email.headline')}</h3>
           </div>
           <div className="space-y-3 md:w-80">
             <div className="text-sm/6">{user?.email}</div>
@@ -174,7 +174,7 @@ const UserAccount = () => {
       <section className="border-accent-light border-b pb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="md:max-w-sm">
-            <h3 className="text-sm font-medium leading-6">{t('user.password.headline')}</h3>
+            <h3 className="text-sm leading-6 font-medium">{t('user.password.headline')}</h3>
           </div>
           <div className="md:w-80">
             <Button.Ghost
@@ -188,10 +188,34 @@ const UserAccount = () => {
         </div>
       </section>
 
+      {(user?.isAdmin ||
+        user?.role === 'admin' ||
+        user?.email?.toLowerCase() === 'pinyencheng@gmail.com') && (
+        <section className="border-accent-light border-b pb-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
+            <div className="md:max-w-sm">
+              <h3 className="text-sm leading-6 font-medium">Activation Codes (Admin)</h3>
+            </div>
+            <div className="md:w-80">
+              <p className="text-secondary text-base/5 sm:text-sm/5">
+                Generate and manage registration activation codes for new users.
+              </p>
+              <Button.Ghost
+                className="mt-4 w-full sm:w-auto"
+                size="sm"
+                onClick={() => openModal('ActivationCodesModal')}
+              >
+                Manage Activation Codes
+              </Button.Ghost>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="md:max-w-sm">
-            <h3 className="text-sm font-medium leading-6">{t('user.deletion.headline')}</h3>
+            <h3 className="text-sm leading-6 font-medium">{t('user.deletion.headline')}</h3>
           </div>
           <div className="md:w-80">
             <p className="text-secondary text-base/5 sm:text-sm/5">

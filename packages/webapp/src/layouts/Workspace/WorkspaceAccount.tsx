@@ -114,7 +114,7 @@ export default function WorkspaceAccount({
 
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg outline outline-1 outline-transparent ring-1 focus:outline-none lg:min-w-64"
+            className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg ring-1 outline outline-1 outline-transparent focus:outline-none lg:min-w-64"
             align="start"
             sideOffset={8}
           >
@@ -127,6 +127,20 @@ export default function WorkspaceAccount({
                 {t('workspace.sidebar.accountSettings')}
               </Button.Link>
             </DropdownMenu.Item>
+
+            {(user?.isAdmin ||
+              user?.role === 'admin' ||
+              user?.email?.toLowerCase() === 'pinyencheng@gmail.com') && (
+              <DropdownMenu.Item className="focus-visible:outline-none">
+                <Button.Link
+                  className="data-[highlighted]:bg-accent-light w-full [&_[data-slot=button]]:justify-start"
+                  size="md"
+                  onClick={() => openModal('ActivationCodesModal')}
+                >
+                  Activation Codes (Admin)
+                </Button.Link>
+              </DropdownMenu.Item>
+            )}
 
             {/* Locale switcher */}
             <DropdownMenu.Sub>
@@ -142,7 +156,7 @@ export default function WorkspaceAccount({
 
               <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
-                  className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg outline outline-1 outline-transparent ring-1 focus:outline-none lg:min-w-64"
+                  className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg ring-1 outline outline-1 outline-transparent focus:outline-none lg:min-w-64"
                   sideOffset={8}
                   alignOffset={-8}
                 >
@@ -189,7 +203,7 @@ export default function WorkspaceAccount({
 
               <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
-                  className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg outline outline-1 outline-transparent ring-1 focus:outline-none lg:min-w-64"
+                  className="bg-foreground ring-accent-light isolate z-10 min-w-80 rounded-xl p-1.5 shadow-lg ring-1 outline outline-1 outline-transparent focus:outline-none lg:min-w-64"
                   sideOffset={8}
                   alignOffset={-8}
                 >
@@ -220,7 +234,7 @@ export default function WorkspaceAccount({
               </Button.Link>
             </DropdownMenu.Item>
 
-            <DropdownMenu.Separator className="bg-accent-light mx-2 mb-1 mt-2 h-px sm:mx-2" />
+            <DropdownMenu.Separator className="bg-accent-light mx-2 mt-2 mb-1 h-px sm:mx-2" />
 
             <DropdownMenu.Item className="focus-visible:outline-none">
               <div className="text-secondary px-3 py-2.5 text-sm/6 sm:px-2 sm:py-2">
