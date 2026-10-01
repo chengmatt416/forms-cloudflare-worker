@@ -486,7 +486,19 @@ export const typeDefs = `
   input UpdateFormSchemasInput {
     formId: String!
     drafts: [JSON]
+    version: Int
     canPublish: Boolean
+  }
+
+  input CreateFormFieldInput {
+    formId: String!
+    field: JSON!
+  }
+
+  input UpdateFormFieldInput {
+    formId: String!
+    fieldId: String!
+    updates: JSON!
   }
 
   input DeleteFormFieldInput {
@@ -497,6 +509,150 @@ export const typeDefs = `
   input UpdateFormThemeInput {
     formId: String!
     themeSettings: JSON
+    theme: JSON
+    logo: String
+    favicon: String
+  }
+
+  input MoveFormInput {
+    formId: String!
+    targetProjectId: String!
+  }
+
+  input UpdateFormCustomReportInput {
+    formId: String!
+    hiddenFields: [String]
+    theme: JSON
+    enablePublicAccess: Boolean
+  }
+
+  input UpdateFormIntegrationInput {
+    formId: String!
+    appId: String
+    attributes: JSON
+    config: JSON
+    status: String
+  }
+
+  input SearchTeamInput {
+    teamId: String!
+    keyword: String!
+  }
+
+  input SearchFormInput {
+    keyword: String!
+  }
+
+  type SearchFormItem {
+    formId: String!
+    formName: String
+    teamId: String
+    teamName: String
+    templateId: String
+    templateName: String
+  }
+
+  type SearchTeamOutput {
+    forms: [FormListItem!]!
+  }
+
+  type FormIntegration {
+    formId: String!
+    appId: String!
+    config: JSON
+    status: String
+  }
+
+  type AppItem {
+    id: String!
+    name: String!
+    description: String
+    icon: String
+    settings: JSON
+  }
+
+  input UpdateSubmissionsCategoryInput {
+    formId: String!
+    submissionIds: [String!]!
+    category: String!
+  }
+
+  input DeleteSubmissionInput {
+    formId: String!
+    submissionIds: [String!]!
+  }
+
+  input UpdateSubmissionAnswerInput {
+    formId: String!
+    submissionId: String!
+    answer: JSON!
+  }
+
+  input SubmissionLocationsInput {
+    formId: String!
+    start: Float
+    end: Float
+  }
+
+  type SubmissionLocation {
+    code: String!
+    total: Int!
+  }
+
+  input SubmissionAnswersInput {
+    formId: String!
+    fieldId: String!
+    page: Int
+    limit: Int
+  }
+
+  type SubmissionAnswerItem {
+    kind: String
+    value: JSON
+    endAt: Float
+  }
+
+  type SubmissionAnswersOutput {
+    total: Int!
+    answers: [SubmissionAnswerItem!]!
+  }
+
+  input UpdateUserInput {
+    name: String
+    avatar: String
+    restoreGravatar: Boolean
+    lang: String
+  }
+
+  input UpdateUserPasswordInput {
+    currentPassword: String!
+    newPassword: String
+  }
+
+  input ProjectMemberInput {
+    projectId: String!
+    memberId: String!
+  }
+
+  input ProjectDetailInput {
+    projectId: String!
+  }
+
+  input TransferTeamInput {
+    teamId: String!
+    memberId: String!
+  }
+
+  input UpdateTeamMemberInput {
+    teamId: String!
+    memberId: String!
+    role: String!
+  }
+
+  input InviteMemberInput {
+    teamId: String!
+    email: String!
+    role: String!
   }
 
   input UpdateFormLogicsInput {
@@ -540,6 +696,8 @@ export const typeDefs = `
     limit: Int
     pageSize: Int
     category: String
+    labelId: String
+    keyword: String
   }
 
   input SubmissionDetailInput {
@@ -567,13 +725,19 @@ export const typeDefs = `
     publicTeamDetail(input: PublicTeamDetailInput!): PublicTeamDetail
     teamOverview(input: TeamDetailInput!): TeamOverview
     teamRecentForms(input: RecentFormsInput!): [RecentForm!]!
+    searchTeam(input: SearchTeamInput!): SearchTeamOutput!
+    searchForms(input: SearchFormInput!): [SearchFormItem!]!
     forms(input: FormsInput!): [FormListItem!]!
     formDetail(input: FormDetailInput!): FormDetail
     publicForm(input: FormDetailInput!): PublicForm
     openForm(input: OpenFormInput!): String!
     verifyFormPassword(input: VerifyPasswordInput!): String!
+    formIntegrations(input: FormDetailInput!): [FormIntegration!]!
+    apps: [AppItem!]!
     submissions(input: SubmissionsInput!): SubmissionsOutput!
     submissionDetail(input: SubmissionDetailInput!): SubmissionDetail
+    submissionLocations(input: SubmissionLocationsInput!): [SubmissionLocation!]!
+    submissionAnswers(input: SubmissionAnswersInput!): SubmissionAnswersOutput!
     formReport(input: FormReportInput!): FormReport
     formAnalytic(input: FormAnalyticInput!): FormAnalytic
     templates: [TemplateItem!]!
@@ -589,6 +753,14 @@ export const typeDefs = `
     createProject(input: CreateProjectInput!): String!
     renameProject(input: RenameProjectInput!): Boolean!
     deleteProject(input: DeleteProjectInput!): Boolean!
+    addProjectMember(input: ProjectMemberInput!): Boolean!
+    deleteProjectMember(input: ProjectMemberInput!): Boolean!
+    leaveProject(input: ProjectDetailInput!): Boolean!
+    transferTeam(input: TransferTeamInput!): Boolean!
+    removeTeamMember(input: TransferTeamInput!): Boolean!
+    updateTeamMemberRole(input: UpdateTeamMemberInput!): Boolean!
+    leaveTeam(input: TeamDetailInput!): Boolean!
+    inviteMember(input: InviteMemberInput!): Boolean!
     createForm(input: CreateFormInput!): String!
     useTemplate(input: UseTemplateInput!): String!
     createFormWithAI(input: CreateFormWithAIInput!): String!
@@ -600,6 +772,9 @@ export const typeDefs = `
     moveFormToTrash(input: FormDetailInput!): Boolean!
     restoreForm(input: FormDetailInput!): Boolean!
     deleteForm(input: FormDetailInput!): Boolean!
+    moveForm(input: MoveFormInput!): Boolean!
+    createFormField(input: CreateFormFieldInput!): Boolean!
+    updateFormField(input: UpdateFormFieldInput!): Boolean!
     deleteFormField(input: DeleteFormFieldInput!): Boolean!
     updateForm(input: UpdateFormInput!): Boolean!
     updateFormArchive(input: UpdateFormArchiveInput!): Boolean!
@@ -609,6 +784,15 @@ export const typeDefs = `
     updateFormLogics(input: UpdateFormLogicsInput!): Boolean!
     updateFormVariables(input: UpdateFormVariablesInput!): Boolean!
     updateFormHiddenFields(input: UpdateHiddenFieldsInput!): Boolean!
+    updateHiddenFields(input: UpdateHiddenFieldsInput!): Boolean!
+    createFormCustomReport(input: FormDetailInput!): Boolean!
+    updateFormCustomReport(input: UpdateFormCustomReportInput!): Boolean!
+    updateFormIntegration(input: UpdateFormIntegrationInput!): Boolean!
+    updateSubmissionsCategory(input: UpdateSubmissionsCategoryInput!): Boolean!
+    deleteSubmissions(input: DeleteSubmissionInput!): Boolean!
+    updateSubmissionAnswer(input: UpdateSubmissionAnswerInput!): Boolean!
+    updateUser(input: UpdateUserInput!): Boolean!
+    updateUserPassword(input: UpdateUserPasswordInput!): Boolean!
     completeSubmission(input: CompleteSubmissionInput!): CompleteSubmissionOutput!
     generateActivationCode: String!
     deleteActivationCode(code: String!): Boolean!

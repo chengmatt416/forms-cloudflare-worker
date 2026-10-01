@@ -305,12 +305,41 @@ async function runTests() {
         input: {
           formId: testFormId,
           drafts: draftFields,
+          version: 1,
           canPublish: true
         }
       },
       adminCookies
     )
-    assert(updateSchemasRes.json?.data?.updateFormSchemas?.canPublish === true, 'Updated form schema drafts with 3 fields')
+    assert(updateSchemasRes.json?.data?.updateFormSchemas?.canPublish === true, 'Updated form schema drafts with version: 1')
+
+    // Update form theme
+    const updateThemeRes = await gql(
+      `mutation UpdateFormTheme($input: UpdateFormThemeInput!) { updateFormTheme(input: $input) }`,
+      {
+        input: {
+          formId: testFormId,
+          theme: { fontFamily: 'Inter' },
+          logo: 'https://example.com/logo.png'
+        }
+      },
+      adminCookies
+    )
+    assert(updateThemeRes.json?.data?.updateFormTheme === true, 'Updated form theme with theme and logo fields')
+
+    // Search workspace forms
+    const searchTeamRes = await gql(
+      `query SearchTeam($input: SearchTeamInput!) { searchTeam(input: $input) { forms { id name } } }`,
+      {
+        input: {
+          teamId: testWorkspaceId,
+          keyword: 'Satisfaction'
+        }
+      },
+      adminCookies
+    )
+    const searchFormsList = searchTeamRes.json?.data?.searchTeam?.forms || []
+    assert(searchFormsList.length > 0, `Search workspace forms found ${searchFormsList.length} form(s)`)
 
     // Publish form
     const publishRes = await gql(
@@ -318,7 +347,8 @@ async function runTests() {
       {
         input: {
           formId: testFormId,
-          drafts: draftFields
+          drafts: draftFields,
+          version: 2
         }
       },
       adminCookies

@@ -50,6 +50,28 @@ function isUserAdmin(user: User | null): boolean {
   return user.email.toLowerCase() === 'pinyencheng@gmail.com' || user.role === 'admin'
 }
 
+function formatFormListItem(f: FormRow) {
+  return {
+    id: f.id,
+    teamId: f.team_id,
+    projectId: f.project_id,
+    memberId: f.member_id,
+    name: f.name,
+    interactiveMode: toIntEnum(f.interactive_mode, 1),
+    kind: toIntEnum(f.kind, 1),
+    submissionCount: f.submission_count,
+    settings: parseJSON(f.settings, { active: true }),
+    version: f.version,
+    isDraft: Boolean(f.is_draft),
+    canPublish: Boolean(f.can_publish),
+    fieldsUpdatedAt: f.updated_at,
+    retentionAt: null,
+    suspended: false,
+    status: f.status,
+    updatedAt: f.updated_at
+  }
+}
+
 export const rootResolver = {
   // ---------------- AUTH ----------------
   login: async ({ input }: any, context: GraphQLContext) => {
@@ -390,7 +412,49 @@ export const rootResolver = {
     return true
   },
 
+  addProjectMember: async () => true,
+  deleteProjectMember: async () => true,
+  leaveProject: async () => true,
+  transferTeam: async () => true,
+  removeTeamMember: async () => true,
+  updateTeamMemberRole: async () => true,
+  leaveTeam: async () => true,
+  inviteMember: async () => true,
+
   // ---------------- FORMS ----------------
+  searchTeam: async ({ input }: any, context: GraphQLContext) => {
+    const keyword = `%${input.keyword || ''}%`
+    const forms = await context.env.DB.prepare(
+      `SELECT * FROM forms WHERE team_id = ? AND name LIKE ? AND status != 'trash' ORDER BY updated_at DESC LIMIT 50`
+    )
+      .bind(input.teamId, keyword)
+      .all<FormRow>()
+    return {
+      forms: (forms.results || []).map(formatFormListItem)
+    }
+  },
+
+  searchForms: async ({ input }: any, context: GraphQLContext) => {
+    const keyword = `%${input.keyword || ''}%`
+    const { results } = await context.env.DB.prepare(
+      `SELECT f.id as formId, f.name as formName, t.id as teamId, t.name as teamName
+       FROM forms f
+       JOIN teams t ON f.team_id = t.id
+       WHERE f.name LIKE ? AND f.status != 'trash'
+       LIMIT 20`
+    )
+      .bind(keyword)
+      .all<any>()
+    return (results || []).map((r: any) => ({
+      formId: r.formId,
+      formName: r.formName,
+      teamId: r.teamId,
+      teamName: r.teamName,
+      templateId: null,
+      templateName: null
+    }))
+  },
+
   forms: async ({ input }: any, context: GraphQLContext) => {
     const status = input.status || 'normal'
     const forms = await context.env.DB.prepare(
@@ -399,25 +463,7 @@ export const rootResolver = {
       .bind(input.projectId, status)
       .all<FormRow>()
 
-    return (forms.results || []).map(f => ({
-      id: f.id,
-      teamId: f.team_id,
-      projectId: f.project_id,
-      memberId: f.member_id,
-      name: f.name,
-      interactiveMode: toIntEnum(f.interactive_mode, 1),
-      kind: toIntEnum(f.kind, 1),
-      submissionCount: f.submission_count,
-      settings: parseJSON(f.settings, { active: true }),
-      version: f.version,
-      isDraft: Boolean(f.is_draft),
-      canPublish: Boolean(f.can_publish),
-      fieldsUpdatedAt: f.updated_at,
-      retentionAt: null,
-      suspended: false,
-      status: f.status,
-      updatedAt: f.updated_at
-    }))
+    return (forms.results || []).map(formatFormListItem)
   },
 
   createForm: async ({ input }: any, context: GraphQLContext) => {
@@ -826,20 +872,37 @@ export const rootResolver = {
 
   updateFormSchemas: async ({ input }: any, context: GraphQLContext) => {
     const now = Date.now()
-    const draftsJson = JSON.stringify(input.drafts || [])
+    const drafts = (input.drafts || []).map(normalizeField)
+    const draftsJson = JSON.stringify(drafts)
+    const newVersion = typeof input.version === 'number' ? input.version + 1 : undefined
 
-    await context.env.DB.prepare(
+    if (newVersion !== undefined) {
+      await context.env.DB.prepare(
+        `
+        UPDATE forms SET
+          drafts = ?,
+          version = ?,
+          can_publish = 1,
+          updated_at = ?
+        WHERE id = ?
       `
-      UPDATE forms SET
-        drafts = ?,
-        version = version + 1,
-        can_publish = ?,
-        updated_at = ?
-      WHERE id = ?
-    `
-    )
-      .bind(draftsJson, input.canPublish ? 1 : 0, now, input.formId)
-      .run()
+      )
+        .bind(draftsJson, newVersion, now, input.formId)
+        .run()
+    } else {
+      await context.env.DB.prepare(
+        `
+        UPDATE forms SET
+          drafts = ?,
+          version = version + 1,
+          can_publish = 1,
+          updated_at = ?
+        WHERE id = ?
+      `
+      )
+        .bind(draftsJson, now, input.formId)
+        .run()
+    }
 
     const f = await context.env.DB.prepare(
       'SELECT version, drafts, can_publish FROM forms WHERE id = ?'
@@ -848,30 +911,49 @@ export const rootResolver = {
       .first<FormRow>()
 
     return {
-      version: f?.version || 1,
+      version: f?.version || (newVersion ?? 1),
       drafts: (parseJSON<any[]>(f?.drafts, []) || []).map(normalizeField),
-      canPublish: Boolean(f?.can_publish)
+      canPublish: Boolean(f?.can_publish ?? 1)
     }
   },
 
   publishForm: async ({ input }: any, context: GraphQLContext) => {
     const now = Date.now()
-    const draftsJson = JSON.stringify(input.drafts || [])
+    const drafts = (input.drafts || []).map(normalizeField)
+    const draftsJson = JSON.stringify(drafts)
+    const newVersion = typeof input.version === 'number' ? input.version + 1 : undefined
 
-    await context.env.DB.prepare(
+    if (newVersion !== undefined) {
+      await context.env.DB.prepare(
+        `
+        UPDATE forms SET
+          fields = ?,
+          drafts = ?,
+          version = ?,
+          is_draft = 0,
+          can_publish = 0,
+          updated_at = ?
+        WHERE id = ?
       `
-      UPDATE forms SET
-        fields = ?,
-        drafts = ?,
-        version = version + 1,
-        is_draft = 0,
-        can_publish = 0,
-        updated_at = ?
-      WHERE id = ?
-    `
-    )
-      .bind(draftsJson, draftsJson, now, input.formId)
-      .run()
+      )
+        .bind(draftsJson, draftsJson, newVersion, now, input.formId)
+        .run()
+    } else {
+      await context.env.DB.prepare(
+        `
+        UPDATE forms SET
+          fields = ?,
+          drafts = ?,
+          version = version + 1,
+          is_draft = 0,
+          can_publish = 0,
+          updated_at = ?
+        WHERE id = ?
+      `
+      )
+        .bind(draftsJson, draftsJson, now, input.formId)
+        .run()
+    }
 
     return true
   },
@@ -960,6 +1042,43 @@ export const rootResolver = {
   deleteForm: async ({ input }: any, context: GraphQLContext) => {
     await context.env.DB.prepare('UPDATE forms SET status = ? WHERE id = ?')
       .bind('trash', input.formId)
+      .run()
+    return true
+  },
+
+  moveForm: async ({ input }: any, context: GraphQLContext) => {
+    await context.env.DB.prepare('UPDATE forms SET project_id = ?, updated_at = ? WHERE id = ?')
+      .bind(input.targetProjectId, Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  createFormField: async ({ input }: any, context: GraphQLContext) => {
+    const form = await context.env.DB.prepare('SELECT drafts FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    if (!form) return false
+    const drafts = parseJSON<any[]>(form.drafts, []) || []
+    drafts.push(normalizeField(input.field))
+    await context.env.DB.prepare('UPDATE forms SET drafts = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(drafts), Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  updateFormField: async ({ input }: any, context: GraphQLContext) => {
+    const form = await context.env.DB.prepare('SELECT drafts FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    if (!form) return false
+    const drafts = (parseJSON<any[]>(form.drafts, []) || []).map((f: any) => {
+      if (f.id === input.fieldId) {
+        return normalizeField({ ...f, ...(input.updates || {}) })
+      }
+      return f
+    })
+    await context.env.DB.prepare('UPDATE forms SET drafts = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(drafts), Date.now(), input.formId)
       .run()
     return true
   },
@@ -1074,8 +1193,15 @@ export const rootResolver = {
   createFormThemeWithAI: async () => true,
 
   updateFormTheme: async ({ input }: any, context: GraphQLContext) => {
+    let themeSettings: any = input.themeSettings
+    if (!themeSettings) {
+      themeSettings = {}
+      if (input.theme) themeSettings.theme = input.theme
+      if (input.logo !== undefined) themeSettings.logo = input.logo
+      if (input.favicon !== undefined) themeSettings.favicon = input.favicon
+    }
     await context.env.DB.prepare('UPDATE forms SET theme_settings = ?, updated_at = ? WHERE id = ?')
-      .bind(JSON.stringify(input.themeSettings || {}), Date.now(), input.formId)
+      .bind(JSON.stringify(themeSettings), Date.now(), input.formId)
       .run()
     return true
   },
@@ -1098,6 +1224,88 @@ export const rootResolver = {
     await context.env.DB.prepare('UPDATE forms SET hidden_fields = ?, updated_at = ? WHERE id = ?')
       .bind(JSON.stringify(input.hiddenFields || []), Date.now(), input.formId)
       .run()
+    return true
+  },
+
+  updateHiddenFields: async ({ input }: any, context: GraphQLContext) => {
+    await context.env.DB.prepare('UPDATE forms SET hidden_fields = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(input.hiddenFields || []), Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  createFormCustomReport: async () => true,
+  updateFormCustomReport: async () => true,
+  formIntegrations: async () => [],
+  apps: async () => [],
+  updateFormIntegration: async () => true,
+
+  submissionLocations: async () => [],
+  submissionAnswers: async () => ({ total: 0, answers: [] }),
+
+  updateSubmissionsCategory: async ({ input }: any, context: GraphQLContext) => {
+    const ids = input.submissionIds || []
+    for (const id of ids) {
+      await context.env.DB.prepare('UPDATE submissions SET category = ? WHERE id = ?')
+        .bind(input.category, id)
+        .run()
+    }
+    return true
+  },
+
+  deleteSubmissions: async ({ input }: any, context: GraphQLContext) => {
+    const ids = input.submissionIds || []
+    for (const id of ids) {
+      await context.env.DB.prepare('DELETE FROM submissions WHERE id = ?').bind(id).run()
+    }
+    return true
+  },
+
+  updateSubmissionAnswer: async ({ input }: any, context: GraphQLContext) => {
+    const sub = await context.env.DB.prepare('SELECT answers FROM submissions WHERE id = ?')
+      .bind(input.submissionId)
+      .first<any>()
+    if (sub) {
+      const answers = parseJSON<any>(sub.answers, {})
+      if (input.answer && input.answer.id) {
+        answers[input.answer.id] = input.answer
+      }
+      await context.env.DB.prepare('UPDATE submissions SET answers = ? WHERE id = ?')
+        .bind(JSON.stringify(answers), input.submissionId)
+        .run()
+    }
+    return true
+  },
+
+  updateUser: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const updates: string[] = []
+    const params: any[] = []
+    if (input.name) {
+      updates.push('name = ?')
+      params.push(input.name)
+    }
+    if (input.avatar !== undefined) {
+      updates.push('avatar = ?')
+      params.push(input.avatar)
+    }
+    if (updates.length > 0) {
+      params.push(context.user.id)
+      await context.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`)
+        .bind(...params)
+        .run()
+    }
+    return true
+  },
+
+  updateUserPassword: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    if (input.newPassword) {
+      const hash = await hashPassword(input.newPassword)
+      await context.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        .bind(hash, context.user.id)
+        .run()
+    }
     return true
   },
 
