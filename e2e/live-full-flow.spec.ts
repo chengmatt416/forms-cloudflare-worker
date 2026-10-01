@@ -329,4 +329,48 @@ test.describe('Live Production E2E Full User Journey', () => {
 
     await collabContext.close()
   })
+
+  test('9. Form Settings - ensures settings page loads without error and can update settings', async ({
+    page
+  }) => {
+    const formId = '0c2b81cf9607480a'
+
+    // Log in
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    // Navigate directly to Form Settings page
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/settings`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify page rendered properly, no "Something went wrong" error boundary
+    const errorBoundary = page.locator('text=Something went wrong')
+    await expect(errorBoundary).not.toBeVisible()
+
+    // Verify Form Settings sections exist
+    await expect(page.locator('text=General').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('text=Access').first()).toBeVisible()
+    await expect(page.locator('text=Email Notification').first()).toBeVisible()
+    await expect(page.locator('text=Translations').first()).toBeVisible()
+    await expect(page.locator('text=Protection').first()).toBeVisible()
+
+    // Toggle a setting switch (e.g. enable progress bar)
+    const switches = page.locator('button[role="switch"]')
+    await expect(switches.first()).toBeVisible()
+    await switches.first().click()
+
+    // Save changes
+    const saveBtn = page.locator('button:has-text("Save changes")')
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+
+    // Verify save succeeds and button becomes disabled again (clean state)
+    await expect(saveBtn).toBeDisabled({ timeout: 10000 })
+    await expect(errorBoundary).not.toBeVisible()
+  })
 })

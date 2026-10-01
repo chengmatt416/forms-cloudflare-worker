@@ -260,7 +260,7 @@ const SelectComponent: FC<SelectProps> = ({
           align="end"
           {...contentProps}
           className={cn(
-            'bg-foreground ring-accent-light isolate z-10 max-h-[18.5rem] rounded-xl p-1 shadow-lg outline outline-1 outline-transparent ring-1 focus:outline-none',
+            'bg-foreground ring-accent-light isolate z-10 max-h-[18.5rem] rounded-xl p-1 shadow-lg ring-1 outline outline-1 outline-transparent focus:outline-none',
             contentProps?.className,
             {
               [`w-[var(--radix-select-trigger-width)]`]: contentProps?.position === 'popper'
@@ -276,7 +276,7 @@ const SelectComponent: FC<SelectProps> = ({
                 key={row.value}
                 value={row.value}
                 disabled={row.disabled}
-                className="text-primary data-[highlighted]:bg-accent-light grid cursor-pointer grid-cols-[theme(spacing.5),1fr] items-center gap-x-2.5 rounded-lg py-2.5 pl-2 pr-3.5 text-base/6 outline-none disabled:opacity-60 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 sm:grid-cols-[theme(spacing.4),1fr] sm:py-1.5 sm:pl-1.5 sm:pr-3 sm:text-sm/6 [&_[data-slot=item]]:col-start-2 [&_[data-slot=item]]:flex [&_[data-slot=item]]:items-center [&_[data-slot=item]]:gap-x-2.5 [&_[data-slot=item]]:sm:gap-x-2"
+                className="text-primary data-[highlighted]:bg-accent-light grid cursor-pointer grid-cols-[theme(spacing.5),1fr] items-center gap-x-2.5 rounded-lg py-2.5 pr-3.5 pl-2 text-base/6 outline-none disabled:opacity-60 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 sm:grid-cols-[theme(spacing.4),1fr] sm:py-1.5 sm:pr-3 sm:pl-1.5 sm:text-sm/6 [&_[data-slot=item]]:col-start-2 [&_[data-slot=item]]:flex [&_[data-slot=item]]:items-center [&_[data-slot=item]]:gap-x-2.5 [&_[data-slot=item]]:sm:gap-x-2"
               >
                 <ItemIndicator>
                   <IconCheck className="h-4 w-4" />
@@ -298,8 +298,8 @@ const SelectComponent: FC<SelectProps> = ({
 
 const MultiSelect: FC<MultiSelectProps> = ({
   className,
-  value = [],
-  options: rawOptions,
+  value: rawValue,
+  options: rawOptions = [],
   labelKey = 'label',
   valueKey = 'value',
   loading,
@@ -314,14 +314,16 @@ const MultiSelect: FC<MultiSelectProps> = ({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
+  const value = useMemo(() => (Array.isArray(rawValue) ? rawValue : []), [rawValue])
+
   const options = useMemo(
     () =>
-      rawOptions.map(row => {
-        const value = row[valueKey]
+      (Array.isArray(rawOptions) ? rawOptions : []).map(row => {
+        const val = row[valueKey]
         const label = row[labelKey]
 
         return {
-          value,
+          value: val,
           label: multiLanguage ? t(label) : label,
           icon: row.icon,
           disabled: row.disabled
@@ -411,7 +413,7 @@ const MultiSelect: FC<MultiSelectProps> = ({
           align="start"
           {...contentProps}
           className={cn(
-            'bg-foreground ring-accent-light data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-90 data-[state=open]:zoom-in-90 isolate z-10 max-h-[22rem] origin-top-left rounded-xl p-1 shadow-lg outline outline-1 outline-transparent ring-1 focus:outline-none sm:max-h-[20rem]',
+            'bg-foreground ring-accent-light data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-90 data-[state=open]:zoom-in-90 isolate z-10 max-h-[22rem] origin-top-left rounded-xl p-1 shadow-lg ring-1 outline outline-1 outline-transparent focus:outline-none sm:max-h-[20rem]',
             contentProps?.className
           )}
           data-slot="content"
@@ -423,7 +425,7 @@ const MultiSelect: FC<MultiSelectProps> = ({
                 <Command.Item
                   key={row.value}
                   value={row.value}
-                  className="text-primary aria-selected:bg-accent-light grid cursor-pointer grid-cols-[theme(spacing.5),1fr] items-center gap-x-2.5 rounded-lg py-2.5 pl-2 pr-3.5 text-base/6 outline-none sm:grid-cols-[theme(spacing.4),1fr] sm:py-1.5 sm:pl-1.5 sm:pr-3 sm:text-sm/6 [&_[data-slot=item]]:col-start-2 [&_[data-slot=item]]:flex [&_[data-slot=item]]:items-center [&_[data-slot=item]]:gap-x-2.5 [&_[data-slot=item]]:sm:gap-x-2"
+                  className="text-primary aria-selected:bg-accent-light grid cursor-pointer grid-cols-[theme(spacing.5),1fr] items-center gap-x-2.5 rounded-lg py-2.5 pr-3.5 pl-2 text-base/6 outline-none sm:grid-cols-[theme(spacing.4),1fr] sm:py-1.5 sm:pr-3 sm:pl-1.5 sm:text-sm/6 [&_[data-slot=item]]:col-start-2 [&_[data-slot=item]]:flex [&_[data-slot=item]]:items-center [&_[data-slot=item]]:gap-x-2.5 [&_[data-slot=item]]:sm:gap-x-2"
                   onSelect={handleSelect}
                 >
                   {value.includes(row.value) && <IconCheck className="h-4 w-4" />}

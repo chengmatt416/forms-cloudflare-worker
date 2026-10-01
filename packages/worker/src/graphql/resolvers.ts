@@ -973,6 +973,9 @@ export const rootResolver = {
 
     const settings = parseJSON<any>(f.settings, { active: true })
     settings.removeBranding = true
+    if (!Array.isArray(settings.languages)) {
+      settings.languages = []
+    }
 
     const rawHidden = parseJSON(f.hidden_fields, [])
     const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
@@ -1030,6 +1033,9 @@ export const rootResolver = {
     const drafts = (parseJSON<any[]>(f.drafts, []) || []).map(normalizeField)
     const settings = parseJSON<any>(f.settings, { active: true })
     settings.removeBranding = true
+    if (!Array.isArray(settings.languages)) {
+      settings.languages = []
+    }
 
     const rawHidden = parseJSON(f.hidden_fields, [])
     const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
@@ -1215,6 +1221,9 @@ export const rootResolver = {
       }
     }
     currentSettings.removeBranding = true
+    if (!Array.isArray(currentSettings.languages)) {
+      currentSettings.languages = []
+    }
 
     await context.env.DB.prepare(
       `

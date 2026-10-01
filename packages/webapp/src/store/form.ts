@@ -119,7 +119,7 @@ export const useFormStore = create<FormStoreType>()(
           state.isFormLoaded = true
 
           if (form?.settings) {
-            const tempSettings = form.settings as TempSettings
+            const tempSettings = { ...form.settings } as TempSettings
 
             tempSettings.closeForm = !tempSettings.active
 
@@ -151,6 +151,10 @@ export const useFormStore = create<FormStoreType>()(
 
             if (tempSettings.ipLimitTime) {
               tempSettings._ipLimitTime = parseDuration(tempSettings.ipLimitTime)
+            }
+
+            if (!Array.isArray(tempSettings.languages)) {
+              tempSettings.languages = []
             }
 
             state.tempSettings = tempSettings

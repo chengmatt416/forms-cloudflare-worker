@@ -60,6 +60,19 @@ export default function FormSettings() {
       const normalizedLanguages = currentLanguages.filter((l: string) => l !== currentLocale)
       settings.languages = normalizedLanguages.length > 0 ? normalizedLanguages : null
 
+      if (settings.quotaLimit !== undefined) {
+        settings.quotaLimit =
+          settings.quotaLimit === '' || settings.quotaLimit === null
+            ? null
+            : Number(settings.quotaLimit)
+      }
+      if (settings.ipLimitCount !== undefined) {
+        settings.ipLimitCount =
+          settings.ipLimitCount === '' || settings.ipLimitCount === null
+            ? null
+            : Number(settings.ipLimitCount)
+      }
+
       await FormService.update(formId, settings)
 
       updateForm({
@@ -67,6 +80,10 @@ export default function FormSettings() {
           ...settings,
           languages: normalizedLanguages
         }
+      })
+      updateTempSettings({
+        ...settings,
+        languages: normalizedLanguages
       })
       setDisabled(true)
     },
@@ -95,7 +112,7 @@ export default function FormSettings() {
 
   return (
     <div className="mt-10 px-6">
-      <div className="flex flex-col space-y-8 lg:flex-row lg:space-x-16 lg:space-y-0">
+      <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-16">
         <aside className="-mx-3 lg:w-1/4">
           <AnchorNavigation
             menus={[
