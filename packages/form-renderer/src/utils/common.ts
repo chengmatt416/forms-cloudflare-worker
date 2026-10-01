@@ -61,4 +61,4 @@ export function createStoreReducer<S = AnyMap, P = any>(
   }
 }
 
-export const isURL = (arg: any) => /^https?:\/\//i.test(arg)
+export const isURL = (arg: any) => /^(https?:\/\/|\/|data:image\/|blob:)/i.test(arg)

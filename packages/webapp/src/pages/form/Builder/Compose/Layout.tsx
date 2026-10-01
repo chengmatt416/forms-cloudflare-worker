@@ -1,7 +1,7 @@
 import type { Layout as FormLayout } from '@heyform-inc/shared-types-enums'
 import type { FC } from 'react'
 
-import { cn } from '@/utils'
+import { cn, isImageURL } from '@/utils'
 import { helper } from '@heyform-inc/utils'
 
 interface LayoutProps extends ComponentProps {
@@ -27,7 +27,7 @@ function filterStyle(brightness?: number) {
 }
 
 export const Layout: FC<LayoutProps> = ({ className, layout, ...restProps }) => {
-  if (!helper.isURL(layout?.mediaUrl)) {
+  if (!isImageURL(layout?.mediaUrl)) {
     return null
   }
 

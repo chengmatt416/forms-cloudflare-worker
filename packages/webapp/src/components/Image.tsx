@@ -1,6 +1,6 @@
 import { FC, ImgHTMLAttributes, SyntheticEvent, useMemo, useState } from 'react'
 
-import { cn, getDecoratedURL } from '@/utils'
+import { cn, getDecoratedURL, isImageURL } from '@/utils'
 import { helper, removeObjectNil } from '@heyform-inc/utils'
 
 export interface ImageProps extends ImgHTMLAttributes<HTMLImageElement> {
@@ -35,7 +35,7 @@ const Background: FC<BackgroundProps> = ({
       return rawSrc
     }
 
-    if (helper.isURL(rawSrc) && (helper.isNumber(width) || helper.isNumber(height))) {
+    if (isImageURL(rawSrc) && (helper.isNumber(width) || helper.isNumber(height))) {
       return getDecoratedURL(
         '/api/image',
         removeObjectNil({
@@ -49,7 +49,7 @@ const Background: FC<BackgroundProps> = ({
     return rawSrc
   }, [rawSrc, height, width])
 
-  const isImage = useMemo(() => helper.isURL(src) || String(src).startsWith('data:'), [src])
+  const isImage = useMemo(() => isImageURL(src), [src])
 
   return (
     <Tag
@@ -65,8 +65,6 @@ const Background: FC<BackgroundProps> = ({
   )
 }
 
-const isURL = (url: string) => /^(https?:\/\/|data:image\/)/i.test(url)
-
 const ImageComponent: FC<ImageProps> = ({
   className,
   src: rawSrc,
@@ -79,7 +77,7 @@ const ImageComponent: FC<ImageProps> = ({
   const { width, height } = resize
 
   const src = useMemo(() => {
-    if (!isURL(rawSrc as string)) {
+    if (!isImageURL(rawSrc)) {
       return
     }
 

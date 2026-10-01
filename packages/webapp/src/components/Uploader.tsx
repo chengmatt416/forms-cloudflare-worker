@@ -18,7 +18,17 @@ export interface UploaderProps extends Omit<ComponentProps, 'onChange'> {
 }
 
 const MAX_SIZE = '10MB'
-const ACCEPT_TYPES = ['image/jpeg', 'image/png', 'image/bmp', 'image/webp', 'image/gif']
+const ACCEPT_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/pjpeg',
+  'image/png',
+  'image/bmp',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'image/x-icon'
+]
 
 export const Uploader: FC<UploaderProps> = ({
   className,
@@ -59,7 +69,12 @@ export const Uploader: FC<UploaderProps> = ({
       return setError(t('components.uploader.exceedsMaxSize', { maxSize }))
     }
 
-    if (!accept.includes(newFile.type)) {
+    const ext = (newFile.name.split('.').pop() || '').toLowerCase()
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'svg', 'ico']
+    const isMimeAccepted = accept.includes(newFile.type)
+    const isExtAccepted = imageExtensions.includes(ext)
+
+    if (!isMimeAccepted && !isExtAccepted) {
       return setError(t('components.uploader.invalidType'))
     }
 

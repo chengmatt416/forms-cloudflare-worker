@@ -3,7 +3,7 @@ import type { FC } from 'react'
 import { RefObject, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { cn } from '@/utils'
+import { cn, isImageURL } from '@/utils'
 import { htmlUtils } from '@heyform-inc/answer-utils'
 import { helper } from '@heyform-inc/utils'
 
@@ -158,7 +158,7 @@ export const Block: FC<BlockProps> = ({
   const descriptionRef = useRef<HTMLDivElement>(undefined)
 
   const isCoverShow = helper.isValid(field.layout?.mediaUrl)
-  const isImageCover = helper.isURL(field.layout?.mediaUrl)
+  const isImageCover = isImageURL(field.layout?.mediaUrl)
 
   function handleTitleChange(title: string) {
     dispatch({

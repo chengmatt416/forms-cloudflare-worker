@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import fs from 'fs'
 
 const BASE_URL = 'https://heyform.pinyen-no2fa.workers.dev'
 const ADMIN_EMAIL = 'pinyencheng@gmail.com'
@@ -372,5 +373,83 @@ test.describe('Live Production E2E Full User Journey', () => {
     // Verify save succeeds and button becomes disabled again (clean state)
     await expect(saveBtn).toBeDisabled({ timeout: 10000 })
     await expect(errorBoundary).not.toBeVisible()
+  })
+
+  test('10. Image Upload and Display Verification - user avatar & question cover', async ({
+    page
+  }) => {
+    const testPngPath = '/tmp/test_avatar.png'
+    const pngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAAPklEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4GUG8AAHxPqSFAAAAAElFTkSuQmCC'
+    fs.writeFileSync(testPngPath, Buffer.from(pngBase64, 'base64'))
+
+    // Log in
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    // Open User Account settings
+    const accountTrigger = page
+      .locator('button:has-text("Pinyen Cheng"), button:has-text("View profile")')
+      .first()
+    await accountTrigger.waitFor({ state: 'visible', timeout: 10000 })
+    await accountTrigger.click()
+
+    const accountSettingItem = page.locator('button:has-text("Account Settings")').first()
+    await accountSettingItem.waitFor({ state: 'visible', timeout: 5000 })
+    await accountSettingItem.click()
+
+    // Upload avatar
+    const changeAvatarBtn = page.locator('button:has-text("Change")').first()
+    await changeAvatarBtn.waitFor({ state: 'visible', timeout: 5000 })
+    await changeAvatarBtn.click()
+
+    const fileInput = page.locator('input[type="file"]').last()
+    await fileInput.setInputFiles(testPngPath)
+
+    // Verify avatar loaded in DOM
+    const avatarImg = page.locator('img[data-slot="image"]').first()
+    await avatarImg.waitFor({ state: 'visible', timeout: 10000 })
+    const avatarSrc = await avatarImg.getAttribute('src')
+    expect(avatarSrc).toBeTruthy()
+    expect(
+      avatarSrc?.startsWith('http') ||
+        avatarSrc?.startsWith('/api/file/') ||
+        avatarSrc?.startsWith('/api/image')
+    ).toBe(true)
+
+    const isLoaded = await avatarImg.evaluate(
+      (img: HTMLImageElement) => img.complete && img.naturalWidth > 0
+    )
+    expect(isLoaded).toBe(true)
+
+    await page.keyboard.press('Escape')
+
+    // Navigate to Form Builder and upload question cover
+    const formId = '0c2b81cf9607480a'
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/create`
+    )
+    await page.waitForLoadState('networkidle')
+
+    const addCoverBtn = page
+      .locator('button:has-text("Add"), button:has-text("Change")')
+      .filter({ hasText: /Add|Change/ })
+      .first()
+    if (await addCoverBtn.isVisible()) {
+      await addCoverBtn.click()
+      const builderFileInput = page.locator('input[type="file"]').first()
+      await builderFileInput.setInputFiles(testPngPath)
+
+      // Verify image renders in preview / layout
+      const coverImgs = page.locator('img[src*="/api/file/"]')
+      await expect(coverImgs.first()).toBeVisible({ timeout: 10000 })
+      const coverLoaded = await coverImgs
+        .first()
+        .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)
+      expect(coverLoaded).toBe(true)
+    }
   })
 })

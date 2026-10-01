@@ -12,7 +12,7 @@ import { FC, useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactSortable } from 'react-sortablejs'
 
-import { cn } from '@/utils'
+import { cn, isImageURL } from '@/utils'
 import { clone, excludeObject, helper, nanoid } from '@heyform-inc/utils'
 
 import { ImagePicker, ImagePickerRef } from '@/components'
@@ -78,7 +78,7 @@ const PictureChoiceItem: FC<PictureChoiceItemProps> = ({
           <div className="heyform-radio-trigger">
             <IconPencil />
           </div>
-        ) : helper.isURL(choice.image) ? (
+        ) : isImageURL(choice.image) ? (
           <>
             <div className="heyform-radio-image">
               <img src={choice.image!} alt={choice.label} />

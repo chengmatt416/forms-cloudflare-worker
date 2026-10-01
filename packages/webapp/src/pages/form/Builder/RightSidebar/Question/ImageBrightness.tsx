@@ -1,6 +1,7 @@
 import { FC, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { isImageURL } from '@/utils'
 import { helper } from '@heyform-inc/utils'
 
 import { Image, Slider } from '@/components'
@@ -27,7 +28,7 @@ export function getBrightnessStyle(brightness: number) {
 
 const ImageBrightness: FC<ImageBrightnessProps> = ({ imageURL, value, onChange }) => {
   const { t } = useTranslation()
-  const isImage = useMemo(() => helper.isURL(imageURL), [imageURL])
+  const isImage = useMemo(() => isImageURL(imageURL), [imageURL])
 
   function handleChange(newValue: number) {
     onChange?.(newValue)

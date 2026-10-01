@@ -144,8 +144,13 @@ export function insertThemeStyle(customTheme?: FormTheme) {
   style.textContent = content
 }
 
+export function isImageURL(url: any): boolean {
+  if (typeof url !== 'string' || !url) return false
+  return helper.isURL(url) || /^(https?:\/\/|data:image\/|\/|blob:)/i.test(url)
+}
+
 export function getUrlValue(v: any) {
-  if (helper.isURL(v)) {
+  if (isImageURL(v)) {
     return v
   }
 }

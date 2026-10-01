@@ -80,44 +80,73 @@ app.post('/api/upload', async c => {
     return c.json({ error: 'No file uploaded' }, 400)
   }
 
-  const key = `${crypto.randomUUID()}-${file.name}`
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const key = `${crypto.randomUUID()}-${safeFilename}`
   const arrayBuffer = await file.arrayBuffer()
+
+  let mimeType = file.type
+  if (!mimeType || mimeType === 'application/octet-stream') {
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    const mimeMap: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      bmp: 'image/bmp',
+      ico: 'image/x-icon',
+      pdf: 'application/pdf',
+      mp4: 'video/mp4'
+    }
+    if (ext && mimeMap[ext]) {
+      mimeType = mimeMap[ext]
+    }
+  }
 
   if (c.env.BUCKET) {
     await c.env.BUCKET.put(key, arrayBuffer, {
-      httpMetadata: { contentType: file.type }
+      httpMetadata: { contentType: mimeType }
     })
   } else {
     // Fallback into D1 uploads table
     await c.env.DB.prepare(
       'INSERT INTO uploads (id, filename, mime_type, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     )
-      .bind(key, file.name, file.type, file.size, new Uint8Array(arrayBuffer), Date.now())
+      .bind(key, file.name, mimeType, file.size, new Uint8Array(arrayBuffer), Date.now())
       .run()
   }
 
+  const origin = new URL(c.req.url).origin
+  const fullUrl = `${origin}/api/file/${key}`
+
   return c.json({
-    url: `/api/file/${key}`,
-    key
+    url: fullUrl,
+    key,
+    filename: file.name,
+    size: file.size
   })
 })
 
 // Serve uploaded files
 app.get('/api/file/:key', async c => {
-  const key = c.req.param('key')
+  const rawKey = c.req.param('key')
+  const key = decodeURIComponent(rawKey)
 
   if (c.env.BUCKET) {
-    const object = await c.env.BUCKET.get(key)
+    const object = (await c.env.BUCKET.get(key)) || (await c.env.BUCKET.get(rawKey))
     if (!object) return c.text('File not found', 404)
 
     const headers = new Headers()
     object.writeHttpMetadata(headers)
     headers.set('etag', object.httpEtag)
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+    headers.set('Access-Control-Allow-Origin', '*')
     return new Response(object.body, { headers })
   }
 
-  const upload = await c.env.DB.prepare('SELECT * FROM uploads WHERE id = ?')
-    .bind(key)
+  const upload = await c.env.DB.prepare('SELECT * FROM uploads WHERE id = ? OR id = ?')
+    .bind(key, rawKey)
     .first<{ mime_type: string; data: any }>()
 
   if (!upload) {
@@ -133,7 +162,9 @@ app.get('/api/file/:key', async c => {
 
   return new Response(raw, {
     headers: {
-      'Content-Type': upload.mime_type
+      'Content-Type': upload.mime_type || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Access-Control-Allow-Origin': '*'
     }
   })
 })

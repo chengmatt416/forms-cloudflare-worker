@@ -2,7 +2,7 @@ import { FieldLayoutAlignEnum } from '@heyform-inc/shared-types-enums'
 import { startTransition, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { cn } from '@/utils'
+import { cn, isImageURL } from '@/utils'
 import { helper } from '@heyform-inc/utils'
 
 import { Button, ImagePicker } from '@/components'
@@ -72,11 +72,11 @@ export default function CoverAndLayout() {
             onChange={value => handleChange('mediaUrl', value)}
           >
             <Button.Ghost size="sm">
-              {t(helper.isURL(field.layout?.mediaUrl) ? 'components.change' : 'components.add')}
+              {t(isImageURL(field.layout?.mediaUrl) ? 'components.change' : 'components.add')}
             </Button.Ghost>
           </ImagePicker>
 
-          {helper.isURL(field.layout?.mediaUrl) && (
+          {isImageURL(field.layout?.mediaUrl) && (
             <Button.Ghost size="sm" onClick={handleRemove}>
               {t('components.remove')}
             </Button.Ghost>
@@ -84,7 +84,7 @@ export default function CoverAndLayout() {
         </div>
       </div>
 
-      {helper.isURL(field.layout?.mediaUrl) && (
+      {isImageURL(field.layout?.mediaUrl) && (
         <>
           {field.layout?.align !== FieldLayoutAlignEnum.INLINE && (
             <div className="border-accent-light mt-4 border-t pt-4">

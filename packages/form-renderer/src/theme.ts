@@ -1,5 +1,6 @@
 import type { FormTheme } from '@heyform-inc/shared-types-enums'
 
+import { isURL } from './utils'
 import { alpha, helper, hexToRgb, isDarkColor } from '@heyform-inc/utils'
 
 export const SYSTEM_FONTS =
@@ -197,7 +198,7 @@ function getBackgroundImageStyle(backgroundImage?: string): string {
     return ''
   }
 
-  if (helper.isURL(safeBackgroundImage)) {
+  if (isURL(safeBackgroundImage)) {
     return `background-image: url("${escapeCSSString(safeBackgroundImage)}");`
   }
 
