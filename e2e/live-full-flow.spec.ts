@@ -266,4 +266,67 @@ test.describe('Live Production E2E Full User Journey', () => {
     await expect(page.locator('.heyform-report-question').first()).toBeVisible()
     await expect(page.locator('.heyform-report-item').first()).toBeVisible()
   })
+
+  test('8. Form Sharing by Email - Instant Access Auto-Grant Without Email Sending', async ({
+    page,
+    browser
+  }) => {
+    const formId = '0c2b81cf9607480a'
+    const targetEmail = `collab_e2e_${Date.now()}@example.com`
+
+    // Log in as Admin
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    // Navigate to Form Share page
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/share`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify Collaborators section is visible
+    await expect(page.locator('#collaborators')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('#collaborators h2')).toBeVisible()
+
+    // Type email and grant access (no email sending needed)
+    await page.fill('input[placeholder="colleague@example.com"]', targetEmail)
+    await page.click('button:has-text("Grant Access")')
+
+    // Verify collaborator row appears in the collaborators card
+    const collabRow = page.locator('#collaborators').locator(`text=${targetEmail}`)
+    await expect(collabRow).toBeVisible({ timeout: 15000 })
+
+    // Generate activation code for collaborator registration
+    const loginRes = await gql(`query Login($input: LoginInput!) { login(input: $input) }`, {
+      input: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
+    })
+    const adminCookie = loginRes.setCookie
+    const genRes = await gql(`mutation { generateActivationCode }`, {}, adminCookie)
+    const code = genRes.json?.data?.generateActivationCode
+
+    // Register collaborator in an isolated context
+    const collabContext = await browser.newContext()
+    const collabPage = await collabContext.newPage()
+
+    await collabPage.goto(`${BASE_URL}/sign-up`)
+    await collabPage.fill('input[type="text"]', 'E2E Collab User')
+    await collabPage.fill('input[type="email"]', targetEmail)
+    await collabPage.fill('input[type="password"]', 'CollabPassword123!')
+    await collabPage.fill('input[placeholder="HEY-XXXXXX"]', code)
+    await collabPage.click('button:has-text("Create an account")')
+    await expect(collabPage).toHaveURL(/.*\/workspace\/.*/, { timeout: 20000 })
+
+    // Navigate to the shared form and verify access is fully granted
+    await collabPage.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/analytics`
+    )
+    await collabPage.waitForLoadState('networkidle')
+    await expect(collabPage.locator('text=Overview').first()).toBeVisible({ timeout: 15000 })
+    await expect(collabPage.locator('.hf-card').filter({ hasText: 'Views' })).toBeVisible()
+
+    await collabContext.close()
+  })
 })

@@ -7,13 +7,14 @@ import { useFormState, useParam } from '@/utils'
 import { helper } from '@heyform-inc/utils'
 
 import { Button, Form, Input, Modal, useToast } from '@/components'
-import { useModal } from '@/store'
+import { useModal, useWorkspaceStore } from '@/store'
 
 export default function InvitationModal() {
   const { t } = useTranslation()
 
   const toast = useToast()
   const { workspaceId } = useParam()
+  const { setMembers } = useWorkspaceStore()
   const [rcForm] = useRCForm()
 
   const { isOpen, onOpenChange } = useModal('InvitationModal')
@@ -34,6 +35,8 @@ export default function InvitationModal() {
 
       rcForm.resetFields()
       onOpenChange(false)
+
+      setMembers(workspaceId, await WorkspaceService.members(workspaceId))
 
       toast({
         title: t('members.invite.sentSuccess', { count: emails.length }),

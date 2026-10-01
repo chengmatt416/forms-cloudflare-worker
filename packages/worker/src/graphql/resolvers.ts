@@ -96,6 +96,31 @@ export const rootResolver = {
 
     const token = await createSessionToken(user.id, context.env.SESSION_SECRET)
 
+    // Auto-claim any workspaces/forms shared with this user's email
+    try {
+      const pendingInvites = await context.env.DB.prepare(
+        'SELECT team_id, role FROM team_invitations WHERE lower(email) = ?'
+      )
+        .bind(user.email.toLowerCase())
+        .all<{ team_id: string; role: string }>()
+
+      for (const invite of pendingInvites.results || []) {
+        await context.env.DB.prepare(
+          'INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), invite.team_id, user.id, invite.role || 'member', Date.now())
+          .run()
+      }
+
+      if ((pendingInvites.results || []).length > 0) {
+        await context.env.DB.prepare('DELETE FROM team_invitations WHERE lower(email) = ?')
+          .bind(user.email.toLowerCase())
+          .run()
+      }
+    } catch (e) {
+      console.error('Error claiming pending invites on login', e)
+    }
+
     // Set cookie headers
     context.setCookies.push(
       `HEYFORM_SESSION=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
@@ -182,6 +207,31 @@ export const rootResolver = {
       .bind(projectId, teamId, 'My Project', userId, now)
       .run()
 
+    // Auto-claim any workspaces/forms shared with this email
+    try {
+      const pendingInvites = await context.env.DB.prepare(
+        'SELECT team_id, role FROM team_invitations WHERE lower(email) = ?'
+      )
+        .bind(cleanEmail)
+        .all<{ team_id: string; role: string }>()
+
+      for (const invite of pendingInvites.results || []) {
+        await context.env.DB.prepare(
+          'INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), invite.team_id, userId, invite.role || 'member', now)
+          .run()
+      }
+
+      if ((pendingInvites.results || []).length > 0) {
+        await context.env.DB.prepare('DELETE FROM team_invitations WHERE lower(email) = ?')
+          .bind(cleanEmail)
+          .run()
+      }
+    } catch (e) {
+      console.error('Error claiming pending invites on signup', e)
+    }
+
     // Set session cookie
     const token = await createSessionToken(userId, context.env.SESSION_SECRET)
     context.setCookies.push(
@@ -228,6 +278,13 @@ export const rootResolver = {
         .bind(team.id)
         .all<Project>()
 
+      const membersRes = await context.env.DB.prepare(
+        'SELECT user_id FROM team_members WHERE team_id = ?'
+      )
+        .bind(team.id)
+        .all<{ user_id: string }>()
+      const memberIds = (membersRes.results || []).map(m => m.user_id)
+
       const projectItems = []
       for (const p of projects.results || []) {
         const countRes = await context.env.DB.prepare(
@@ -242,7 +299,7 @@ export const rootResolver = {
           name: p.name,
           ownerId: p.owner_id,
           icon: p.icon || '📁',
-          members: [context.user.id],
+          members: memberIds.length > 0 ? memberIds : [context.user.id],
           formCount: countRes?.count || 0,
           isOwner: p.owner_id === context.user.id
         })
@@ -254,7 +311,7 @@ export const rootResolver = {
         ownerId: team.owner_id,
         avatar: team.avatar || null,
         storageQuota: -1, // Unlimited
-        memberCount: 1,
+        memberCount: Math.max(1, memberIds.length),
         additionalSeats: 999999, // Unlimited seats
         isOwner: team.owner_id === context.user.id,
         inviteCode: null,
@@ -377,8 +434,8 @@ export const rootResolver = {
       .bind(input.teamId)
       .all<any>()
 
-    return (members.results || []).map((m: any) => ({
-      id: m.member_id,
+    const results = (members.results || []).map((m: any) => ({
+      id: m.user_id,
       name: m.name,
       email: m.email,
       avatar: m.avatar || null,
@@ -386,6 +443,27 @@ export const rootResolver = {
       isOwner: m.user_id === m.owner_id,
       lastSeenAt: null
     }))
+
+    // Also include pending pre-granted invites
+    const invites = await context.env.DB.prepare(
+      `SELECT id, email, role FROM team_invitations WHERE team_id = ?`
+    )
+      .bind(input.teamId)
+      .all<any>()
+
+    for (const inv of invites.results || []) {
+      results.push({
+        id: inv.id,
+        name: inv.email.split('@')[0],
+        email: inv.email,
+        avatar: null,
+        role: inv.role || 'member',
+        isOwner: false,
+        lastSeenAt: null
+      })
+    }
+
+    return results
   },
 
   // ---------------- PROJECTS ----------------
@@ -420,11 +498,133 @@ export const rootResolver = {
   addProjectMember: async () => true,
   deleteProjectMember: async () => true,
   leaveProject: async () => true,
-  transferTeam: async () => true,
-  removeTeamMember: async () => true,
-  updateTeamMemberRole: async () => true,
-  leaveTeam: async () => true,
-  inviteMember: async () => true,
+
+  transferTeam: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const { teamId, memberId } = input
+    const member = await context.env.DB.prepare(
+      'SELECT user_id FROM team_members WHERE team_id = ? AND (id = ? OR user_id = ?)'
+    )
+      .bind(teamId, memberId, memberId)
+      .first<{ user_id: string }>()
+    if (member) {
+      await context.env.DB.prepare('UPDATE teams SET owner_id = ? WHERE id = ?')
+        .bind(member.user_id, teamId)
+        .run()
+      await context.env.DB.prepare(
+        'UPDATE team_members SET role = ? WHERE team_id = ? AND user_id = ?'
+      )
+        .bind('owner', teamId, member.user_id)
+        .run()
+    }
+    return true
+  },
+
+  removeTeamMember: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const { teamId, memberId } = input
+    await context.env.DB.prepare(
+      'DELETE FROM team_members WHERE team_id = ? AND (id = ? OR user_id = ?)'
+    )
+      .bind(teamId, memberId, memberId)
+      .run()
+    await context.env.DB.prepare(
+      'DELETE FROM team_invitations WHERE team_id = ? AND (id = ? OR lower(email) = lower(?))'
+    )
+      .bind(teamId, memberId, memberId)
+      .run()
+    return true
+  },
+
+  updateTeamMemberRole: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const { teamId, memberId, role } = input
+    await context.env.DB.prepare(
+      'UPDATE team_members SET role = ? WHERE team_id = ? AND (id = ? OR user_id = ?)'
+    )
+      .bind(role, teamId, memberId, memberId)
+      .run()
+    return true
+  },
+
+  leaveTeam: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    await context.env.DB.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?')
+      .bind(input.teamId, context.user.id)
+      .run()
+    return true
+  },
+
+  inviteMember: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const teamId = input.teamId
+    const emails: string[] = input.emails || (input.email ? [input.email] : [])
+    const role = input.role || 'member'
+
+    const team = await context.env.DB.prepare('SELECT * FROM teams WHERE id = ?')
+      .bind(teamId)
+      .first<Team>()
+    if (!team) throw new Error('Workspace not found')
+
+    for (const rawEmail of emails) {
+      const email = rawEmail.trim().toLowerCase()
+      if (!email) continue
+
+      const targetUser = await context.env.DB.prepare('SELECT id FROM users WHERE lower(email) = ?')
+        .bind(email)
+        .first<User>()
+
+      if (targetUser) {
+        await context.env.DB.prepare(
+          'INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), teamId, targetUser.id, role, Date.now())
+          .run()
+      } else {
+        await context.env.DB.prepare(
+          'INSERT OR REPLACE INTO team_invitations (id, team_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), teamId, email, role, Date.now())
+          .run()
+      }
+    }
+
+    return true
+  },
+
+  shareForm: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const { formId, emails, role = 'member' } = input
+    const form = await context.env.DB.prepare('SELECT team_id FROM forms WHERE id = ?')
+      .bind(formId)
+      .first<FormRow>()
+    if (!form) throw new Error('Form not found')
+
+    for (const rawEmail of emails || []) {
+      const email = rawEmail.trim().toLowerCase()
+      if (!email) continue
+
+      const targetUser = await context.env.DB.prepare('SELECT id FROM users WHERE lower(email) = ?')
+        .bind(email)
+        .first<User>()
+
+      if (targetUser) {
+        await context.env.DB.prepare(
+          'INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), form.team_id, targetUser.id, role, Date.now())
+          .run()
+      } else {
+        await context.env.DB.prepare(
+          'INSERT OR REPLACE INTO team_invitations (id, team_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)'
+        )
+          .bind(generateId(), form.team_id, email, role, Date.now())
+          .run()
+      }
+    }
+
+    return true
+  },
 
   // ---------------- FORMS ----------------
   searchTeam: async ({ input }: any, context: GraphQLContext) => {

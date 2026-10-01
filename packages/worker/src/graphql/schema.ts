@@ -691,8 +691,15 @@ export const typeDefs = `
 
   input InviteMemberInput {
     teamId: String!
-    email: String!
-    role: String!
+    emails: [String]
+    email: String
+    role: String
+  }
+
+  input ShareFormInput {
+    formId: String!
+    emails: [String!]!
+    role: String
   }
 
   input UpdateFormLogicsInput {
@@ -808,6 +815,7 @@ export const typeDefs = `
     updateTeamMemberRole(input: UpdateTeamMemberInput!): Boolean!
     leaveTeam(input: TeamDetailInput!): Boolean!
     inviteMember(input: InviteMemberInput!): Boolean!
+    shareForm(input: ShareFormInput!): Boolean!
     createForm(input: CreateFormInput!): String!
     useTemplate(input: UseTemplateInput!): String!
     createFormWithAI(input: CreateFormWithAIInput!): String!

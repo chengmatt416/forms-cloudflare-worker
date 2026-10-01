@@ -97,3 +97,15 @@ CREATE TABLE IF NOT EXISTS activation_codes (
   used_at INTEGER,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS team_invitations (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at INTEGER NOT NULL,
+  UNIQUE(team_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON team_invitations(email);
+CREATE INDEX IF NOT EXISTS idx_team_invitations_team ON team_invitations(team_id);

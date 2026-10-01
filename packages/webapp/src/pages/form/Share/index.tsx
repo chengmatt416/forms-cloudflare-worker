@@ -6,12 +6,14 @@ import {
   IconMail,
   IconQrcode
 } from '@tabler/icons-react'
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { WorkspaceService } from '@/services'
 import { getDecoratedURL, useParam } from '@/utils'
+import { helper } from '@heyform-inc/utils'
 
-import { Button, Tooltip } from '@/components'
+import { Avatar, Badge, Button, Input, Tooltip, useToast } from '@/components'
 import { FORM_EMBED_OPTIONS } from '@/consts'
 import { useAppStore, useFormStore, useWorkspaceStore } from '@/store'
 
@@ -22,10 +24,74 @@ import QRCodeModal from './QRCodeModal'
 export default function FormShare() {
   const { t } = useTranslation()
 
-  const { formId } = useParam()
+  const toast = useToast()
+  const { workspaceId, formId } = useParam()
   const { openModal } = useAppStore()
   const { sharingURLPrefix } = useWorkspaceStore()
   const { form, selectEmbedType } = useFormStore()
+
+  const [collaborators, setCollaborators] = useState<any[]>([])
+  const [collaboratorEmail, setCollaboratorEmail] = useState('')
+  const [isSharing, setIsSharing] = useState(false)
+
+  const loadCollaborators = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const res = await WorkspaceService.members(workspaceId)
+      setCollaborators(res || [])
+    } catch (e) {
+      console.error(e)
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    loadCollaborators()
+  }, [loadCollaborators])
+
+  async function handleGrantAccess() {
+    const email = collaboratorEmail.trim().toLowerCase()
+    if (!helper.isEmail(email)) {
+      toast({
+        title: 'Invalid Email',
+        message: 'Please enter a valid email address.'
+      })
+      return
+    }
+
+    setIsSharing(true)
+    try {
+      await WorkspaceService.sendInvites(workspaceId, [email])
+      setCollaboratorEmail('')
+      toast({
+        title: 'Access Granted',
+        message: `Direct access granted to ${email}. No email required.`
+      })
+      await loadCollaborators()
+    } catch (err: any) {
+      toast({
+        title: 'Failed to share',
+        message: err.message
+      })
+    } finally {
+      setIsSharing(false)
+    }
+  }
+
+  async function handleRemoveCollaborator(memberId: string) {
+    try {
+      await WorkspaceService.removeMember(workspaceId, memberId)
+      toast({
+        title: 'Access Revoked',
+        message: 'Collaborator removed successfully.'
+      })
+      await loadCollaborators()
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        message: err.message
+      })
+    }
+  }
 
   const shareLink = useMemo(() => sharingURLPrefix + '/form/' + formId, [formId, sharingURLPrefix])
 
@@ -133,6 +199,72 @@ export default function FormShare() {
                 </div>
               </Tooltip>
             </div>
+          </div>
+        </section>
+
+        <section id="collaborators">
+          <h2 className="hf-section-title">Collaborators</h2>
+          <p className="text-secondary text-sm/6">
+            Share this form with others. Type their email to instantly grant them access—no email
+            invitation required.
+          </p>
+
+          <div className="mt-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                placeholder="colleague@example.com"
+                value={collaboratorEmail}
+                onChange={setCollaboratorEmail}
+                className="w-full sm:max-w-md"
+                onKeyDown={(e: any) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleGrantAccess()
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                loading={isSharing}
+                disabled={!collaboratorEmail || !helper.isEmail(collaboratorEmail.trim())}
+                onClick={handleGrantAccess}
+              >
+                Grant Access
+              </Button>
+            </div>
+
+            {collaborators.length > 0 && (
+              <div className="hf-card mt-4 divide-y divide-[#e5e7eb] px-5">
+                {collaborators.map(c => (
+                  <div key={c.id} className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9" src={c.avatar} />
+                      <div>
+                        <div className="text-sm font-medium">{c.name}</div>
+                        <div className="text-secondary text-xs">{c.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        className={
+                          c.isOwner ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        }
+                      >
+                        {c.isOwner ? 'Owner' : 'Collaborator'}
+                      </Badge>
+                      {!c.isOwner && (
+                        <Button.Link
+                          className="text-xs text-red-600 hover:text-red-700"
+                          onClick={() => handleRemoveCollaborator(c.id)}
+                        >
+                          Remove
+                        </Button.Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
