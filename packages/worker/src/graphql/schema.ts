@@ -313,16 +313,45 @@ export const typeDefs = `
     createdAt: Float
   }
 
-  type FormReport {
-    submissions: [SubmissionItem]
-    total: Int
+  type FormAnalyticMetric {
+    value: Float
+    change: Float
   }
 
   type FormAnalytic {
+    totalVisits: FormAnalyticMetric
+    submissionCount: FormAnalyticMetric
+    completeRate: FormAnalyticMetric
+    averageTime: FormAnalyticMetric
     views: Int
     submissions: Int
     starts: Int
     completionRate: Float
+  }
+
+  type FormReportAnswer {
+    submissionId: String
+    kind: String
+    value: JSON
+    endAt: Float
+  }
+
+  type FormReportSubmissionGroup {
+    _id: String
+    answers: [FormReportAnswer]
+  }
+
+  type FormReportResponse {
+    id: String
+    total: Int
+    count: Int
+    average: Float
+    chooses: JSON
+  }
+
+  type FormReport {
+    responses: [FormReportResponse]
+    submissions: [FormReportSubmissionGroup]
   }
 
   type TemplateItem {
@@ -617,6 +646,7 @@ export const typeDefs = `
   }
 
   type SubmissionAnswerItem {
+    submissionId: String
     kind: String
     value: JSON
     endAt: Float
@@ -720,6 +750,7 @@ export const typeDefs = `
 
   input FormAnalyticInput {
     formId: String!
+    range: String
   }
 
   input CdnTokenInput {
@@ -754,7 +785,7 @@ export const typeDefs = `
     submissionDetail(input: SubmissionDetailInput!): SubmissionDetail
     submissionLocations(input: SubmissionLocationsInput!): [SubmissionLocation!]!
     submissionAnswers(input: SubmissionAnswersInput!): SubmissionAnswersOutput!
-    formReport(input: FormReportInput!): FormReport
+    formReport(input: FormDetailInput!): FormReport
     formAnalytic(input: FormAnalyticInput!): FormAnalytic
     templates: [TemplateItem!]!
     templateDetail(input: TemplateDetailInput!): TemplateItem

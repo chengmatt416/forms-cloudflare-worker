@@ -408,12 +408,54 @@ async function runTests() {
 
     // 4. Query form analytics
     const analyticRes = await gql(
-      `query FormAnalytic($input: FormAnalyticInput!) { formAnalytic(input: $input) { submissions views starts } }`,
-      { input: { formId: testFormId } },
+      `query FormAnalytic($input: FormAnalyticInput!) {
+        formAnalytic(input: $input) {
+          submissions
+          views
+          totalVisits { value change }
+          submissionCount { value change }
+          completeRate { value change }
+          averageTime { value change }
+        }
+      }`,
+      { input: { formId: testFormId, range: '7d' } },
       adminCookies
     )
     const analytic = analyticRes.json?.data?.formAnalytic
-    assert(analytic?.submissions >= 1, `Analytics retrieved: submissions=${analytic?.submissions}`)
+    assert(analytic?.submissionCount?.value >= 1, `Analytics structured submissionCount=${analytic?.submissionCount?.value}`)
+    assert(analytic?.submissions >= 1, `Analytics legacy submissions=${analytic?.submissions}`)
+
+    // 5. Query form report
+    const reportRes = await gql(
+      `query FormReport($input: FormDetailInput!) {
+        formReport(input: $input) {
+          responses { id total count average chooses }
+          submissions { _id answers { submissionId kind value endAt } }
+        }
+      }`,
+      { input: { formId: testFormId } },
+      adminCookies
+    )
+    const reportData = reportRes.json?.data?.formReport
+    assert(reportData?.responses?.length > 0, `Report responses generated for ${reportData?.responses?.length} fields`)
+    assert(reportData?.submissions?.length > 0, `Report submissions grouped for ${reportData?.submissions?.length} fields`)
+
+    // 6. Query submission answers
+    const firstFieldId = reportData?.responses?.[0]?.id
+    if (firstFieldId) {
+      const answersRes = await gql(
+        `query submissionAnswers($input: SubmissionAnswersInput!) {
+          submissionAnswers(input: $input) {
+            total
+            answers { kind value endAt }
+          }
+        }`,
+        { input: { formId: testFormId, fieldId: firstFieldId, page: 1, limit: 10 } },
+        adminCookies
+      )
+      const answersData = answersRes.json?.data?.submissionAnswers
+      assert(answersData?.total >= 1, `Submission answers retrieved: ${answersData?.total}`)
+    }
   }
 
   // 9. File Upload Endpoint

@@ -237,4 +237,33 @@ test.describe('Live Production E2E Full User Journey', () => {
     await expect(page.locator('button:has-text("Publish")')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('text=Questions').first()).toBeVisible()
   })
+
+  test('7. Form Analytics Page - Overview Metrics & Response Breakdown', async ({ page }) => {
+    const formId = '0c2b81cf9607480a'
+
+    // Log in
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    // Navigate directly to Analytics page
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/analytics`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify Overview section renders
+    await expect(page.locator('text=Overview').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.hf-card').filter({ hasText: 'Views' })).toBeVisible()
+    await expect(page.locator('.hf-card').filter({ hasText: 'Submissions' })).toBeVisible()
+    await expect(page.locator('.hf-card').filter({ hasText: 'Complete Rate' })).toBeVisible()
+    await expect(page.locator('.hf-card').filter({ hasText: 'Average Duration' })).toBeVisible()
+
+    // Verify Report section renders questions and responses
+    await expect(page.locator('text=Report')).toBeVisible()
+    await expect(page.locator('.heyform-report-question').first()).toBeVisible()
+    await expect(page.locator('.heyform-report-item').first()).toBeVisible()
+  })
 })
