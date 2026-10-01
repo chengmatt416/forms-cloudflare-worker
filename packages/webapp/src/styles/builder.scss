@@ -344,6 +344,29 @@
     @apply text-lg;
     min-height: 1.75rem;
     color: var(--heyform-description-color);
+
+    table {
+      @apply my-3 w-full border-collapse overflow-hidden rounded-md text-sm md:text-base;
+      border: 1px solid rgba(125, 125, 125, 0.25);
+      th, td {
+        border: 1px solid rgba(125, 125, 125, 0.2);
+        padding: 8px 12px;
+        text-align: left;
+      }
+      th {
+        font-weight: 600;
+        background: rgba(125, 125, 125, 0.08);
+      }
+      tr:nth-child(even) td {
+        background: rgba(125, 125, 125, 0.03);
+      }
+    }
+    ul {
+      @apply my-2 list-disc pl-5 space-y-1;
+    }
+    ol {
+      @apply my-2 list-decimal pl-5 space-y-1;
+    }
   }
 
   .heyform-block-title,
@@ -1211,13 +1234,31 @@
 
 .rule-condition,
 .rule-action {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
-  grid-template-columns: 3rem 12rem minmax(auto, 34rem);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+
+  > * {
+    min-width: 0;
+  }
 }
 
 .rule-action-calculate {
-  grid-template-columns: 3rem 12rem 10rem 10rem minmax(auto, 13rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+
+  > * {
+    min-width: 0;
+  }
 }
 
 .condition-select-popup {

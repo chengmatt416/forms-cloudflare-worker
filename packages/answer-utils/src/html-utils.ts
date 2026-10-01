@@ -11,7 +11,35 @@ interface HTMLWalkOptions {
   livePreview?: boolean
 }
 
-const ALLOWED_BLOCK_TAGS = ['div', 'h1', 'h2', 'h3', 'p', 'br']
+const ALLOWED_BLOCK_TAGS = [
+  'div',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'br',
+  'hr',
+  'table',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'th',
+  'td',
+  'caption',
+  'colgroup',
+  'col',
+  'ul',
+  'ol',
+  'li',
+  'blockquote',
+  'pre',
+  'section',
+  'article'
+]
 const ALLOWED_TAGS = [
   'text',
   'span',
@@ -23,6 +51,14 @@ const ALLOWED_TAGS = [
   'i',
   'u',
   's',
+  'sub',
+  'sup',
+  'mark',
+  'small',
+  'del',
+  'ins',
+  'em',
+  'img',
   'mention',
   'variable',
   'hiddenfield'
@@ -33,7 +69,24 @@ const ALLOWED_ATTRIBUTES = [
   'data-mention',
   'data-variable',
   'data-hiddenfield',
-  'contenteditable'
+  'contenteditable',
+  'style',
+  'border',
+  'cellpadding',
+  'cellspacing',
+  'colspan',
+  'rowspan',
+  'align',
+  'valign',
+  'width',
+  'height',
+  'scope',
+  'src',
+  'alt',
+  'title',
+  'target',
+  'rel',
+  'id'
 ]
 
 const UNSAFE_URL_PROTOCOLS = new Set(['javascript', 'vbscript', 'data'])
@@ -183,10 +236,11 @@ function serialize(schemas?: any[], option?: HTMLWalkOptions): string {
 
       let [tag, body, attributes] = schema
 
+      const EMPTY_ALLOWED_TAGS = ['br', 'hr', 'td', 'th', 'col', 'img', 'tr']
+
       if (
         !allowedTags.includes(tag) ||
-        // Only allows empty br node
-        (helper.isEmpty(body) && helper.isEmpty(attributes) && tag !== 'br')
+        (helper.isEmpty(body) && helper.isEmpty(attributes) && !EMPTY_ALLOWED_TAGS.includes(tag))
       ) {
         return ''
       }
@@ -197,6 +251,10 @@ function serialize(schemas?: any[], option?: HTMLWalkOptions): string {
 
       if (tag === 'br') {
         return '<br />'
+      }
+
+      if (tag === 'hr') {
+        return '<hr />'
       }
 
       let property = ''

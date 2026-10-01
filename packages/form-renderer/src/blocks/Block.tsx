@@ -25,7 +25,35 @@ const SPLIT_LAYOUTS = [
   FieldLayoutAlignEnum.SPLIT_RIGHT
 ]
 
-const ALLOWED_BLOCK_TAGS = ['div', 'h1', 'h2', 'h3', 'p', 'br']
+const ALLOWED_BLOCK_TAGS = [
+  'div',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'br',
+  'hr',
+  'table',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'th',
+  'td',
+  'caption',
+  'colgroup',
+  'col',
+  'ul',
+  'ol',
+  'li',
+  'blockquote',
+  'pre',
+  'section',
+  'article'
+]
 const ALLOWED_TAGS = [
   'text',
   'span',
@@ -37,6 +65,14 @@ const ALLOWED_TAGS = [
   'i',
   'u',
   's',
+  'sub',
+  'sup',
+  'mark',
+  'small',
+  'del',
+  'ins',
+  'em',
+  'img',
   'mention',
   'variable',
   'hiddenfield',
@@ -49,6 +85,22 @@ const ALLOWED_ATTRIBUTES = [
   'data-variable',
   'data-hiddenfield',
   'contenteditable',
+  'style',
+  'border',
+  'cellpadding',
+  'cellspacing',
+  'colspan',
+  'rowspan',
+  'align',
+  'valign',
+  'width',
+  'height',
+  'scope',
+  'src',
+  'alt',
+  'title',
+  'target',
+  'rel',
   'id'
 ]
 const UNSAFE_URL_PROTOCOLS = new Set(['javascript', 'vbscript', 'data'])
@@ -118,7 +170,7 @@ function sanitizeRichTextNode(node: unknown): any[] | string | undefined {
   const sanitizedAttributes = sanitizeAttributes(attributes)
   const sanitizedNode: any[] = [tag]
 
-  if (sanitizedBody.length > 0) {
+  if (sanitizedBody.length > 0 || tag === 'td' || tag === 'th' || tag === 'tr') {
     sanitizedNode.push(sanitizedBody)
   }
 
@@ -137,13 +189,22 @@ function sanitizeRichTextNodes(nodes: unknown[]): any[] {
   return nodes.map(sanitizeRichTextNode).filter(Boolean)
 }
 
+const SERIALIZE_OPTIONS = {
+  allowedTags: ALLOWED_TAGS,
+  allowedBlockTags: ALLOWED_BLOCK_TAGS,
+  allowedAttributes: ALLOWED_ATTRIBUTES
+}
+
 function sanitizeRichTextHTML(value: unknown): string {
   if (Array.isArray(value)) {
-    return htmlUtils.serialize(sanitizeRichTextNodes(value))
+    return htmlUtils.serialize(sanitizeRichTextNodes(value), SERIALIZE_OPTIONS)
   }
 
   if (typeof value === 'string') {
-    return htmlUtils.serialize(sanitizeRichTextNodes(htmlUtils.parse(value)))
+    return htmlUtils.serialize(
+      sanitizeRichTextNodes(htmlUtils.parse(value, SERIALIZE_OPTIONS)),
+      SERIALIZE_OPTIONS
+    )
   }
 
   return ''

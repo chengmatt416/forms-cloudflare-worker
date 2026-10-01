@@ -54,14 +54,14 @@ const HiddenFieldItem: FC<{ hiddenField: HiddenField }> = ({ hiddenField }) => {
 
   return (
     <li className="flex items-center gap-x-4">
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
           <QuestionIcon
-            className="w-6 justify-center px-0"
+            className="w-6 shrink-0 justify-center px-0"
             configs={CUSTOM_FIELDS_CONFIGS}
             kind={FieldKindEnum.HIDDEN_FIELDS}
           />
-          <span className="text-sm/6 font-medium">{hiddenField.name}</span>
+          <span className="min-w-0 flex-1 truncate text-sm/6 font-medium">{hiddenField.name}</span>
         </div>
       </div>
 

@@ -51,25 +51,27 @@ const LogicComponent = () => {
   }
 
   return (
-    <div className="flex h-[70vh] flex-col">
-      <div className="border-accent-light border-b p-4">
-        <h2 className="text-lg font-medium text-slate-900">
+    <div className="flex h-[75vh] max-h-[85vh] flex-col overflow-hidden">
+      <div className="border-accent-light shrink-0 border-b p-4">
+        <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100">
           {t('form.builder.logic.rule.headline')}
         </h2>
 
         {currentField && (
-          <div className="mt-2 flex flex-1 items-center justify-between gap-x-2">
+          <div className="mt-2 flex min-w-0 flex-1 items-center justify-between gap-x-2">
             <QuestionIcon
               kind={currentField.kind}
               index={currentField.index}
               parentIndex={currentField.parent?.index}
             />
-            <div className="flex-1 truncate">{htmlUtils.plain(currentField.title as string)}</div>
+            <div className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-300">
+              {htmlUtils.plain(currentField.title as string)}
+            </div>
           </div>
         )}
       </div>
 
-      <div className="scrollbar h-[calc(70vh-10.35rem)] flex-1 space-y-4 p-4">
+      <div className="scrollbar min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4">
         <PayloadForm
           form={rcForm}
           fields={fields}
@@ -80,7 +82,7 @@ const LogicComponent = () => {
         />
       </div>
 
-      <div className="flex items-center justify-between border-t border-gray-200 p-4">
+      <div className="flex shrink-0 items-center justify-between border-t border-gray-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <Button.Link size="md" className="text-error" onClick={handleRemoveAll}>
           {t('form.builder.logic.rule.removeAll')}
         </Button.Link>

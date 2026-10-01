@@ -4,22 +4,24 @@ import type {
   FormTheme,
   HiddenField,
   Logic,
+  NavigateAction,
   Variable
 } from '@heyform-inc/shared-types-enums'
-import { QUESTION_FIELD_KINDS } from '@heyform-inc/shared-types-enums'
+import { ActionEnum, QUESTION_FIELD_KINDS } from '@heyform-inc/shared-types-enums'
 import { useContext } from 'react'
 
 import {
   LRU,
   LRUMemoryStore,
+  applyEnhancedLogicToFields as applyLogicToFields,
   createStoreContext,
   createStoreReducer,
+  evaluatePayloadConditions,
   isFile,
   progressPercentage,
   replaceHTML,
   validateLogicField
 } from './utils'
-import { applyLogicToFields } from '@heyform-inc/answer-utils'
 import { helper } from '@heyform-inc/utils'
 
 import type { AnyMap, IFormField } from './typings'
@@ -241,13 +243,51 @@ const actions: any = {
   },
 
   scrollNext: (state: IState) => {
-    const { scrollIndex, fields, values, jumpFieldIds } = state
-    const isTouched = validateLogicField(fields[scrollIndex!], jumpFieldIds, values)
+    const {
+      scrollIndex,
+      fields,
+      values,
+      jumpFieldIds,
+      logics,
+      variables,
+      allFields,
+      thankYouFields
+    } = state
+    const currentField = fields[scrollIndex!]
+    const isTouched = validateLogicField(currentField, jumpFieldIds, values)
 
     if (!isTouched || scrollIndex! >= fields.length - 1) {
       return {
         ...state,
         isScrollNextDisabled: true
+      }
+    }
+
+    if (logics && currentField) {
+      const logic = logics.find(l => l.fieldId === currentField.id)
+      if (logic) {
+        const navigates = logic.payloads.filter(p => p.action.kind === ActionEnum.NAVIGATE)
+        for (const navigate of navigates) {
+          const isMatched = evaluatePayloadConditions(
+            navigate,
+            currentField,
+            values,
+            allFields,
+            variables
+          )
+          if (isMatched) {
+            const jumpFieldId = (navigate.action as NavigateAction).fieldId
+            const thankYouIndex = thankYouFields.findIndex(f => f.id === jumpFieldId)
+            if (thankYouIndex > -1) {
+              state.onSubmit?.(values, true, state.stripe)?.catch(console.error)
+              return actions.setIsSubmitted(state, {
+                isSubmitted: true,
+                thankYouFieldId: jumpFieldId
+              })
+            }
+            return actions.scrollToField(state, { fieldId: jumpFieldId })
+          }
+        }
       }
     }
 
@@ -258,18 +298,29 @@ const actions: any = {
   },
 
   scrollToField(state: IState, { fieldId, errorFieldId }: any) {
-    const index = state.fields.findIndex(f => f.id === fieldId)
+    let fields = state.fields
+    let index = fields.findIndex(f => f.id === fieldId)
 
     if (index < 0) {
-      return state
+      const allIndex = state.allFields.findIndex(f => f.id === fieldId)
+      if (allIndex >= 0) {
+        const targetField = state.allFields[allIndex]
+        fields = [...fields, targetField]
+        index = fields.length - 1
+      } else {
+        return state
+      }
     }
 
-    return actions.scrollTo(state, {
-      scrollIndex: index,
-      scrollTo:
-        !helper.isNil(state.scrollIndex) && index >= state.scrollIndex! ? 'next' : 'previous',
-      errorFieldId
-    })
+    return actions.scrollTo(
+      { ...state, fields },
+      {
+        scrollIndex: index,
+        scrollTo:
+          !helper.isNil(state.scrollIndex) && index >= state.scrollIndex! ? 'next' : 'previous',
+        errorFieldId
+      }
+    )
   },
 
   scrollTo(state: IState, { scrollIndex, scrollTo, errorFieldId }: any) {

@@ -164,11 +164,38 @@ export interface Property {
   redirectDelay?: number
 }
 
+export interface AdvancedValidation {
+  enabled?: boolean
+  type?: 'regex' | 'min_max' | 'format' | 'disallowed' | 'exact' | 'custom'
+  regex?: string
+  regexFlags?: string
+  min?: number
+  max?: number
+  format?:
+    | 'alphanumeric'
+    | 'numeric'
+    | 'alpha'
+    | 'lowercase'
+    | 'uppercase'
+    | 'no_special_chars'
+    | 'integer_only'
+    | 'positive_number'
+    | 'email_domain'
+    | 'url_https'
+  formatValue?: string
+  disallowedValues?: string
+  expectedValue?: string
+  errorMessage?: string
+}
+
 export interface Validation {
   required?: boolean
   min?: number
   max?: number
   matchExpected?: boolean
+  regex?: string
+  customErrorMessage?: string
+  advanced?: AdvancedValidation
 }
 
 export interface FormField {
@@ -386,7 +413,26 @@ export interface NumberCondition {
   expected?: number
 }
 
+export interface BaseCondition {
+  fieldId?: string
+  variableId?: string
+  comparison: ComparisonEnum | string
+  expected?: any
+}
+
+export interface BetweenCondition extends BaseCondition {
+  comparison: ComparisonEnum.BETWEEN
+  expected?: any
+}
+
+export interface RegexCondition extends BaseCondition {
+  comparison: ComparisonEnum.MATCHES_REGEX
+  expected?: string
+}
+
 export interface OtherCondition {
+  fieldId?: string
+  variableId?: string
   comparison: ComparisonEnum.IS_EMPTY | ComparisonEnum.IS_NOT_EMPTY
 }
 
@@ -407,6 +453,9 @@ export type LogicCondition =
   | StringVariableCondition
   | NumberVariableCondition
   | OtherCondition
+  | BetweenCondition
+  | RegexCondition
+  | BaseCondition
 
 export interface NavigateAction {
   kind: ActionEnum.NAVIGATE
@@ -435,7 +484,10 @@ export type LogicAction = NavigateAction | NumberCalculateAction | StringCalcula
 export interface LogicPayload {
   id: string
   condition: LogicCondition
+  conditions?: LogicCondition[]
+  logicalOperator?: 'and' | 'or' | 'nor'
   action: LogicAction
+  actions?: LogicAction[]
 }
 
 export interface Logic {

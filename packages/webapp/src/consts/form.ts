@@ -1083,6 +1083,14 @@ export const SINGLE_CHOICE_CONDITIONS = [
   {
     value: 'is_not',
     label: 'form.builder.logic.rule.isNot'
+  },
+  {
+    value: 'is_empty',
+    label: 'form.builder.logic.rule.isEmpty'
+  },
+  {
+    value: 'is_not_empty',
+    label: 'form.builder.logic.rule.isNotEmpty'
   }
 ]
 
@@ -1098,7 +1106,14 @@ export const TRUE_FALSE_CONDITIONS = [
 ]
 
 export const MULTIPLE_CHOICE_CONDITIONS = [
-  ...SINGLE_CHOICE_CONDITIONS,
+  {
+    value: 'is',
+    label: 'form.builder.logic.rule.is'
+  },
+  {
+    value: 'is_not',
+    label: 'form.builder.logic.rule.isNot'
+  },
   {
     value: 'contains',
     label: 'form.builder.logic.rule.contains'
@@ -1106,11 +1121,34 @@ export const MULTIPLE_CHOICE_CONDITIONS = [
   {
     value: 'does_not_contain',
     label: 'form.builder.logic.rule.doesNotContain'
+  },
+  {
+    value: 'is_empty',
+    label: 'form.builder.logic.rule.isEmpty'
+  },
+  {
+    value: 'is_not_empty',
+    label: 'form.builder.logic.rule.isNotEmpty'
   }
 ]
 
 export const TEXT_CONDITIONS = [
-  ...MULTIPLE_CHOICE_CONDITIONS,
+  {
+    value: 'is',
+    label: 'form.builder.logic.rule.is'
+  },
+  {
+    value: 'is_not',
+    label: 'form.builder.logic.rule.isNot'
+  },
+  {
+    value: 'contains',
+    label: 'form.builder.logic.rule.contains'
+  },
+  {
+    value: 'does_not_contain',
+    label: 'form.builder.logic.rule.doesNotContain'
+  },
   {
     value: 'starts_with',
     label: 'form.builder.logic.rule.startsWith'
@@ -1118,11 +1156,30 @@ export const TEXT_CONDITIONS = [
   {
     value: 'ends_with',
     label: 'form.builder.logic.rule.endsWith'
+  },
+  {
+    value: 'matches_regex',
+    label: 'form.builder.logic.rule.matchesRegex'
+  },
+  {
+    value: 'is_empty',
+    label: 'form.builder.logic.rule.isEmpty'
+  },
+  {
+    value: 'is_not_empty',
+    label: 'form.builder.logic.rule.isNotEmpty'
   }
 ]
 
 export const DATE_CONDITIONS = [
-  ...SINGLE_CHOICE_CONDITIONS,
+  {
+    value: 'is',
+    label: 'form.builder.logic.rule.is'
+  },
+  {
+    value: 'is_not',
+    label: 'form.builder.logic.rule.isNot'
+  },
   {
     value: 'is_before',
     label: 'form.builder.logic.rule.isBefore'
@@ -1130,6 +1187,18 @@ export const DATE_CONDITIONS = [
   {
     value: 'is_after',
     label: 'form.builder.logic.rule.isAfter'
+  },
+  {
+    value: 'between',
+    label: 'form.builder.logic.rule.between'
+  },
+  {
+    value: 'is_empty',
+    label: 'form.builder.logic.rule.isEmpty'
+  },
+  {
+    value: 'is_not_empty',
+    label: 'form.builder.logic.rule.isNotEmpty'
   }
 ]
 
@@ -1147,12 +1216,28 @@ export const NUMBER_CONDITIONS = [
     label: 'form.builder.logic.rule.greaterThan'
   },
   {
+    value: 'less_than',
+    label: 'form.builder.logic.rule.lessThan'
+  },
+  {
     value: 'greater_or_equal_than',
     label: 'form.builder.logic.rule.greaterOrEqualThan'
   },
   {
     value: 'less_or_equal_than',
     label: 'form.builder.logic.rule.lessOrEqualThan'
+  },
+  {
+    value: 'between',
+    label: 'form.builder.logic.rule.between'
+  },
+  {
+    value: 'is_empty',
+    label: 'form.builder.logic.rule.isEmpty'
+  },
+  {
+    value: 'is_not_empty',
+    label: 'form.builder.logic.rule.isNotEmpty'
   }
 ]
 
@@ -1164,6 +1249,21 @@ export const DEFAULT_COMPARISONS = [
   {
     value: 'is_not_empty',
     label: 'form.builder.logic.rule.isNotEmpty'
+  }
+]
+
+export const LOGICAL_OPERATORS = [
+  {
+    value: 'and',
+    label: 'form.builder.logic.rule.matchAll'
+  },
+  {
+    value: 'or',
+    label: 'form.builder.logic.rule.matchAny'
+  },
+  {
+    value: 'nor',
+    label: 'form.builder.logic.rule.matchNone'
   }
 ]
 

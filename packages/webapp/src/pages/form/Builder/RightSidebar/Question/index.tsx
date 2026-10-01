@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useStoreContext } from '../../store'
+import AdvancedValidationSettings from './AdvancedValidation'
 import CoverAndLayout from './CoverAndLayout'
 import DateSettings from './Date'
 import MultipleChoiceSettings from './MultipleChoice'
@@ -54,6 +55,7 @@ const Settings = ({ field }: RequiredSettingsProps) => {
   return (
     <div className="mt-3 space-y-2">
       <RequiredSettings field={field} />
+      <AdvancedValidationSettings field={field} />
       {children}
     </div>
   )

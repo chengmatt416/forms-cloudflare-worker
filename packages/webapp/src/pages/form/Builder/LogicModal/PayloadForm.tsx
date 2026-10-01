@@ -9,11 +9,11 @@ import {
   Variable
 } from '@heyform-inc/shared-types-enums'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
-import { type FC, type ReactNode, useEffect } from 'react'
+import { type FC, type ReactNode, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { validatePayload } from '@heyform-inc/answer-utils'
-import { nanoid } from '@heyform-inc/utils'
+import { cn } from '@/utils'
+import { helper, nanoid } from '@heyform-inc/utils'
 
 import { Button, Form, Tooltip } from '@/components'
 import { FormFieldType } from '@/types'
@@ -39,8 +39,43 @@ interface PayloadItemProps {
   onChange?: (value: LogicPayload) => void
 }
 
+const NO_EXPECTED_COMPARISONS: any[] = [
+  ComparisonEnum.IS_EMPTY,
+  ComparisonEnum.IS_NOT_EMPTY,
+  'is_empty',
+  'is_not_empty'
+]
+
+function validateLogicPayload(payload: any): boolean {
+  if (!payload?.action?.kind) {
+    return false
+  }
+
+  const conditions = helper.isValidArray(payload.conditions)
+    ? payload.conditions
+    : payload.condition
+      ? [payload.condition]
+      : []
+
+  if (conditions.length === 0) {
+    return false
+  }
+
+  for (const cond of conditions) {
+    if (!NO_EXPECTED_COMPARISONS.includes(cond.comparison) && helper.isEmpty(cond.expected)) {
+      return false
+    }
+  }
+
+  if (payload.action.kind === ActionEnum.NAVIGATE) {
+    return helper.isValid(payload.action.fieldId)
+  }
+
+  return true
+}
+
 const validator = async (rule: any, value: any) => {
-  if (!validatePayload(value)) {
+  if (!validateLogicPayload(value)) {
     throw new Error(rule.message as string)
   }
 }
@@ -91,6 +126,9 @@ function getPayload(
     payload.condition.expected = allowMultiple ? [choices[0]?.id] : choices[0]?.id
   }
 
+  payload.conditions = [payload.condition]
+  payload.logicalOperator = 'and'
+
   return payload
 }
 
@@ -104,12 +142,69 @@ export const PayloadItem: FC<PayloadItemProps> = ({
 }) => {
   const { t } = useTranslation()
 
-  function handleConditionChange(condition: LogicCondition) {
-    onChange?.({ ...value, condition } as LogicPayload)
+  const conditions = useMemo(() => {
+    if (helper.isValidArray((value as any)?.conditions)) {
+      return (value as any).conditions as LogicCondition[]
+    }
+    if (value?.condition) {
+      return [value.condition]
+    }
+    return [getPayload(currentField?.kind).condition]
+  }, [currentField?.kind, value])
+
+  const logicalOperator: 'and' | 'or' | 'nor' = (value as any)?.logicalOperator || 'and'
+
+  function handleOperatorChange(op: 'and' | 'or' | 'nor') {
+    onChange?.({
+      ...value,
+      logicalOperator: op,
+      conditions,
+      condition: conditions[0]
+    } as any)
+  }
+
+  function handleConditionChange(index: number, condition: LogicCondition) {
+    const newConditions = [...conditions]
+    newConditions[index] = condition
+    onChange?.({
+      ...value,
+      conditions: newConditions,
+      condition: newConditions[0]
+    } as any)
+  }
+
+  function handleAddCondition() {
+    const newCondition = getPayload(
+      currentField?.kind,
+      currentField?.properties?.choices,
+      currentField?.properties?.allowMultiple
+    ).condition
+
+    const newConditions = [...conditions, newCondition]
+    onChange?.({
+      ...value,
+      conditions: newConditions,
+      condition: newConditions[0]
+    } as any)
+  }
+
+  function handleDeleteCondition(index: number) {
+    if (conditions.length <= 1) return
+    const newConditions = conditions.filter((_, i) => i !== index)
+    onChange?.({
+      ...value,
+      conditions: newConditions,
+      condition: newConditions[0]
+    } as any)
   }
 
   function handleActionChange(action: LogicAction) {
-    onChange?.({ ...value, action } as LogicPayload)
+    onChange?.({
+      ...value,
+      conditions,
+      condition: conditions[0],
+      action
+    } as any)
   }
 
   function handleDelete() {
@@ -117,26 +212,129 @@ export const PayloadItem: FC<PayloadItemProps> = ({
   }
 
   return (
-    <div className="payload-item">
-      <div className="payload-item-content">
-        <div className="flex-1 space-y-2">
-          <Condition
-            field={currentField!}
-            value={value?.condition}
-            onChange={handleConditionChange}
-          />
-          <Action
-            fields={fields}
-            currentField={currentField!}
-            variables={variables}
-            value={value?.action}
-            onChange={handleActionChange}
-          />
+    <div className="border-accent-light bg-foreground/60 rounded-xl border p-4 shadow-sm transition-all hover:border-slate-300">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 space-y-3">
+          {/* Header for conditions match logic: Match ALL (AND) / ANY (OR) / NONE (NOR) */}
+          <div className="border-accent-light/40 flex flex-wrap items-center justify-between gap-2 border-b pb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
+                {t('form.builder.logic.rule.matchPrefix') || 'Match Logic'}:
+              </span>
+              <div className="border-accent-light bg-accent-light/30 inline-flex rounded-lg border p-0.5">
+                <button
+                  type="button"
+                  className={cn(
+                    'cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-all',
+                    logicalOperator === 'and'
+                      ? 'bg-foreground text-primary font-semibold shadow-sm'
+                      : 'text-secondary hover:text-primary'
+                  )}
+                  onClick={() => handleOperatorChange('and')}
+                >
+                  {t('form.builder.logic.rule.matchAll') || 'ALL (AND)'}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-all',
+                    logicalOperator === 'or'
+                      ? 'bg-foreground text-primary font-semibold shadow-sm'
+                      : 'text-secondary hover:text-primary'
+                  )}
+                  onClick={() => handleOperatorChange('or')}
+                >
+                  {t('form.builder.logic.rule.matchAny') || 'ANY (OR)'}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-all',
+                    logicalOperator === 'nor'
+                      ? 'bg-foreground text-primary font-semibold shadow-sm'
+                      : 'text-secondary hover:text-primary'
+                  )}
+                  onClick={() => handleOperatorChange('nor')}
+                >
+                  {t('form.builder.logic.rule.matchNone') || 'NONE (NOR)'}
+                </button>
+              </div>
+            </div>
+            <span className="text-[11px] text-slate-500 italic">
+              {logicalOperator === 'and'
+                ? 'Triggers if all conditions are met'
+                : logicalOperator === 'or'
+                  ? 'Triggers if at least one condition is met'
+                  : 'Triggers only if none of the conditions match'}
+            </span>
+          </div>
+
+          {/* Condition list */}
+          <div className="divide-accent-light/40 space-y-1 divide-y">
+            {conditions.map((cond, idx) => (
+              <Condition
+                key={idx}
+                field={currentField!}
+                allFields={fields}
+                variables={variables}
+                value={cond}
+                label={
+                  idx === 0 ? (
+                    t('form.builder.logic.rule.when')
+                  ) : (
+                    <button
+                      type="button"
+                      className="bg-accent-light/70 hover:bg-accent-light text-primary cursor-pointer rounded px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase transition-colors"
+                      title="Click to toggle logic condition: AND / OR / NOR"
+                      onClick={() =>
+                        handleOperatorChange(
+                          logicalOperator === 'and'
+                            ? 'or'
+                            : logicalOperator === 'or'
+                              ? 'nor'
+                              : 'and'
+                        )
+                      }
+                    >
+                      {logicalOperator.toUpperCase()}
+                    </button>
+                  )
+                }
+                canDelete={conditions.length > 1}
+                onDelete={() => handleDeleteCondition(idx)}
+                onChange={newCond => handleConditionChange(idx, newCond)}
+              />
+            ))}
+          </div>
+
+          {/* Add condition button */}
+          <div className="pt-1">
+            <Button.Link
+              className="text-secondary hover:text-primary gap-1 text-xs"
+              size="sm"
+              onClick={handleAddCondition}
+            >
+              <IconPlus className="h-3.5 w-3.5" />
+              {t('form.builder.logic.rule.addCondition') || 'Add condition'} (
+              {logicalOperator.toUpperCase()})
+            </Button.Link>
+          </div>
+
+          {/* Action */}
+          <div className="border-accent-light/60 border-t pt-3">
+            <Action
+              fields={fields}
+              currentField={currentField!}
+              variables={variables}
+              value={value?.action}
+              onChange={handleActionChange}
+            />
+          </div>
         </div>
 
         <Tooltip label={t('form.builder.logic.rule.deleteRule')}>
           <Button.Link
-            className="text-secondary hover:text-primary"
+            className="text-secondary hover:text-error"
             size="sm"
             iconOnly
             onClick={handleDelete}
@@ -183,7 +381,7 @@ export const PayloadList: FC<PayloadListProps> = ({
             {children}
 
             {listFields.length > 0 && (
-              <div className="mb-4 space-y-6">
+              <div className="mb-4 space-y-4">
                 {listFields.map((listField, index) => {
                   function handleDelete() {
                     remove(index)

@@ -27,6 +27,18 @@ export default {
   'Choose {{max}} choices': '選擇{{max}}個選項',
   'Choose between {{min}} to {{max}} choices': '選擇{{min}}到{{max}}個選項',
   'Draw your signature above': '在上面繪製你的簽名',
+  'Trackpad Mode': '觸控板手寫',
+  'Sign on Phone': '手機掃碼簽名',
+  'Scan to Sign on Phone': '手機掃碼簽名',
+  'Scan with phone camera to sign on touch screen':
+    '使用手機相機掃描 QR Code，即可在觸控螢幕上簽名',
+  'Waiting for signature from phone...': '等待手機完成簽名中...',
+  'Signature synced!': '簽名已同步！',
+  'Trackpad Mode Active - Glide finger on trackpad to write':
+    '觸控板模式已啟用 - 在觸控板上滑動手指即可直接手寫',
+  'Press Space to toggle pen up/down. Press ESC or click Done to finish':
+    '按空白鍵起筆/落筆，按 ESC 或點擊完成結束',
+  Done: '完成',
   Clear: '清除',
   Yes: '是',
   No: '否',

@@ -1,5 +1,5 @@
-import type { FormField } from '@heyform-inc/shared-types-enums'
-import { FieldKindEnum, NumberPrice } from '@heyform-inc/shared-types-enums'
+import type { FormField, NavigateAction } from '@heyform-inc/shared-types-enums'
+import { ActionEnum, FieldKindEnum, NumberPrice } from '@heyform-inc/shared-types-enums'
 import { IconChevronRight } from '@tabler/icons-react'
 import Big from 'big.js'
 import clsx from 'clsx'
@@ -8,14 +8,17 @@ import RCForm, { Field, useForm } from 'rc-field-form'
 import { FC, ReactNode, useEffect, useMemo, useState } from 'react'
 
 import {
+  applyEnhancedLogicToFields as applyLogicToFields,
+  evaluatePayloadConditions,
   getNavigateFieldId,
   sendMessageToParent,
   sliceFieldsByLogics,
   useEnterKey,
   useTranslation,
+  validateAdvancedValue,
   validateLogicField
 } from '../utils'
-import { applyLogicToFields, validateFields } from '@heyform-inc/answer-utils'
+import { validateFields } from '@heyform-inc/answer-utils'
 import { clone, helper } from '@heyform-inc/utils'
 
 import { Submit } from '../components'
@@ -91,31 +94,47 @@ export const Form: FC<FormProps> = ({
     }
 
     const values = { ...state.values, [field.id]: value }
+
+    const curAdvError = validateAdvancedValue(field, value, t)
+    if (curAdvError) {
+      setSubmitError(curAdvError)
+      return
+    }
+
     const isTouched = validateLogicField(field, state.jumpFieldIds, values)
     const isPartialSubmission = state.isScrollNextDisabled && !isTouched
+    const isSubmitting = isLastBlock || state.isScrollNextDisabled
 
-    if (isLastBlock || isPartialSubmission) {
+    if (isSubmitting) {
       if (loading) {
         return
       }
 
-      if (isLastBlock) {
-        dispatch({
-          type: 'setIsSubmitTouched',
-          payload: {
-            isSubmitTouched: true
-          }
-        })
-      }
+      dispatch({
+        type: 'setIsSubmitTouched',
+        payload: {
+          isSubmitTouched: true
+        }
+      })
 
       setSubmitError(undefined)
 
-      const fields = isPartialSubmission
-        ? sliceFieldsByLogics(state.fields, state.jumpFieldIds)
-        : state.fields
+      const fields =
+        isPartialSubmission || !isLastBlock
+          ? sliceFieldsByLogics(state.fields, state.jumpFieldIds)
+          : state.fields
 
       try {
         validateFields(fields, values)
+        for (const f of fields) {
+          const advError = validateAdvancedValue(f, values[f.id], t)
+          if (advError) {
+            throw {
+              message: advError,
+              response: { id: f.id }
+            }
+          }
+        }
         setLoading(true)
 
         if (state.stripe) {
@@ -201,6 +220,15 @@ export const Form: FC<FormProps> = ({
     if (state.isSubmitTouched) {
       try {
         validateFields(state.fields, values)
+        for (const f of state.fields) {
+          const advError = validateAdvancedValue(f, values[f.id], t)
+          if (advError) {
+            throw {
+              message: advError,
+              response: { id: f.id }
+            }
+          }
+        }
       } catch (err: any) {
         console.error(err, err?.response)
         dispatch({
@@ -212,6 +240,53 @@ export const Form: FC<FormProps> = ({
         })
 
         return
+      }
+    }
+
+    // Check if current field triggers a logic navigate jump (including jumping back to previous questions or to thank-you screens)
+    if (state.logics) {
+      const logic = state.logics.find(l => l.fieldId === field.id)
+      if (logic) {
+        const navigates = logic.payloads.filter(p => p.action.kind === ActionEnum.NAVIGATE)
+        for (const navigate of navigates) {
+          const isMatched = evaluatePayloadConditions(
+            navigate,
+            field,
+            values,
+            state.allFields,
+            state.variables
+          )
+          if (isMatched) {
+            const jumpFieldId = (navigate.action as NavigateAction).fieldId
+            const thankYouField = state.thankYouFields.find(f => f.id === jumpFieldId)
+            if (thankYouField) {
+              setLoading(true)
+              try {
+                await state.onSubmit?.(values, true, state.stripe)
+              } catch (err: any) {
+                console.error('Failed to submit form on thank-you jump:', err)
+              } finally {
+                setLoading(false)
+              }
+              dispatch({
+                type: 'setIsSubmitted',
+                payload: {
+                  isSubmitted: true,
+                  thankYouFieldId: jumpFieldId
+                }
+              })
+              removeStorage(state.formId)
+              return
+            }
+            dispatch({
+              type: 'scrollToField',
+              payload: {
+                fieldId: jumpFieldId
+              }
+            })
+            return
+          }
+        }
       }
     }
 

@@ -19,6 +19,7 @@ import { helper, type } from '@heyform-inc/utils'
 
 import { CHAR_A_KEY_CODE } from '../consts'
 import type { AnyMap, IFormField, IPartialFormField } from '../typings'
+import { evaluatePayloadConditions } from './logic'
 
 const MENTION_REGEX = /<span[^>]+data-mention="([^"]+)"([^>]+)?>[^<]+<\/span>/gi
 const HIDDEN_FIELD_REGEX = /<span[^>]+data-hiddenfield="([^"]+)"([^>]+)?>[^<]+<\/span>/gi
@@ -99,6 +100,86 @@ export function replaceHTML(
   return html
 }
 
+export const RICH_TEXT_OPTIONS = {
+  allowedBlockTags: [
+    'div',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'br',
+    'hr',
+    'table',
+    'thead',
+    'tbody',
+    'tfoot',
+    'tr',
+    'th',
+    'td',
+    'caption',
+    'colgroup',
+    'col',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'pre',
+    'section',
+    'article'
+  ],
+  allowedTags: [
+    'text',
+    'span',
+    'bold',
+    'strong',
+    'code',
+    'a',
+    'b',
+    'i',
+    'u',
+    's',
+    'sub',
+    'sup',
+    'mark',
+    'small',
+    'del',
+    'ins',
+    'em',
+    'img',
+    'mention',
+    'variable',
+    'hiddenfield'
+  ],
+  allowedAttributes: [
+    'href',
+    'class',
+    'data-mention',
+    'data-variable',
+    'data-hiddenfield',
+    'contenteditable',
+    'style',
+    'border',
+    'cellpadding',
+    'cellspacing',
+    'colspan',
+    'rowspan',
+    'align',
+    'valign',
+    'width',
+    'height',
+    'scope',
+    'src',
+    'alt',
+    'title',
+    'target',
+    'rel',
+    'id'
+  ]
+}
+
 export function parseFields(
   fields?: IFormField[],
   translations: Record<string, any> = {}
@@ -117,7 +198,8 @@ export function parseFields(
 
     if (helper.isArray(title)) {
       f.title = htmlUtils.serialize(title, {
-        livePreview: true
+        livePreview: true,
+        ...RICH_TEXT_OPTIONS
       })
     }
 
@@ -125,7 +207,8 @@ export function parseFields(
 
     if (helper.isArray(description)) {
       f.description = htmlUtils.serialize(description as string[], {
-        livePreview: true
+        livePreview: true,
+        ...RICH_TEXT_OPTIONS
       })
     }
 
@@ -267,11 +350,10 @@ export function getNavigateFieldId(
     const result = payloads.filter(p => p.action.kind === ActionEnum.NAVIGATE)
 
     for (const payload of result) {
-      const { condition, action } = payload
-      const isValidated = validateCondition(field, condition, fieldValues)
+      const isValidated = evaluatePayloadConditions(payload, field, fieldValues)
 
       if (isValidated) {
-        const { fieldId } = action as NavigateAction
+        const { fieldId } = payload.action as NavigateAction
         const index = thankYouFields.findIndex(f => f.id === fieldId)
 
         if (index > -1) {

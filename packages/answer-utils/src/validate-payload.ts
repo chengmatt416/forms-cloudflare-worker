@@ -2,15 +2,36 @@ import { ActionEnum, ComparisonEnum, LogicPayload } from '@heyform-inc/shared-ty
 
 import { helper } from '@heyform-inc/utils'
 
-const OTHER_COMPARISONS = [ComparisonEnum.IS_EMPTY, ComparisonEnum.IS_NOT_EMPTY]
+const NO_EXPECTED_COMPARISONS = [
+  ComparisonEnum.IS_EMPTY,
+  ComparisonEnum.IS_NOT_EMPTY,
+  'is_empty',
+  'is_not_empty'
+]
 
 export function validatePayload(payload: LogicPayload): boolean {
-  if (
-    !payload.action.kind ||
-    (!OTHER_COMPARISONS.includes(payload.condition.comparison) &&
-      helper.isEmpty((payload.condition as any).expected))
-  ) {
+  if (!payload.action?.kind) {
     return false
+  }
+
+  const pAny = payload as any
+  const conditions = helper.isValidArray(pAny.conditions)
+    ? pAny.conditions
+    : pAny.condition
+      ? [pAny.condition]
+      : []
+
+  if (conditions.length === 0) {
+    return false
+  }
+
+  for (const cond of conditions) {
+    if (
+      !NO_EXPECTED_COMPARISONS.includes(cond.comparison) &&
+      helper.isEmpty((cond as any).expected)
+    ) {
+      return false
+    }
   }
 
   if (payload.action.kind === ActionEnum.NAVIGATE) {

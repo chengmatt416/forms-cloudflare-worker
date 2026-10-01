@@ -793,8 +793,59 @@ button.button-icon-only {
 .heyform-block-description {
   @apply text-lg;
   color: var(--heyform-description-color);
-  b {
+  b, strong {
     color: var(--heyform-question-color);
+    font-weight: 600;
+  }
+  table {
+    @apply my-3 w-full border-collapse overflow-hidden rounded-md text-sm md:text-base;
+    border: 1px solid rgba(125, 125, 125, 0.25);
+    th, td {
+      border: 1px solid rgba(125, 125, 125, 0.2);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+      background: rgba(125, 125, 125, 0.08);
+      color: var(--heyform-question-color);
+    }
+    tr:nth-child(even) td {
+      background: rgba(125, 125, 125, 0.03);
+    }
+  }
+  ul {
+    @apply my-2 list-disc pl-5 space-y-1;
+  }
+  ol {
+    @apply my-2 list-decimal pl-5 space-y-1;
+  }
+  li {
+    @apply my-0.5;
+  }
+  code {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875rem;
+    background: rgba(125, 125, 125, 0.1);
+  }
+  pre {
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875rem;
+    overflow-x: auto;
+    background: rgba(125, 125, 125, 0.1);
+  }
+  blockquote {
+    @apply my-2 pl-3 border-l-4 italic;
+    border-color: var(--heyform-answer-color);
+  }
+  hr {
+    @apply my-3 border-t;
+    border-color: rgba(125, 125, 125, 0.2);
   }
 }
 

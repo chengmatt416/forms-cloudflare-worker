@@ -1,6 +1,6 @@
 import type { FC } from 'react'
 
-import { useTranslation } from '../utils'
+import { useTranslation, validateAdvancedValue } from '../utils'
 
 import { FormField, Input } from '../components'
 import { useStore } from '../store'
@@ -35,6 +35,12 @@ export const Website: FC<BlockProps> = ({ field, ...restProps }) => {
             {
               type: 'url',
               message: t("This URL isn't valid, should start with the scheme (http, https)")
+            },
+            {
+              validator: async (_, val) => {
+                const err = validateAdvancedValue(field, val, t)
+                if (err) throw new Error(err)
+              }
             }
           ]}
         >

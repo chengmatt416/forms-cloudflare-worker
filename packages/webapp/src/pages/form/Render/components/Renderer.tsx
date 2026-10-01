@@ -142,7 +142,23 @@ export const Renderer: FC<RendererProps> = ({ form, query, locale, contactId }) 
         token.recaptchaToken = await recaptchaToken(captchaRef)
       }
 
-      const file = await new Uploader(form, values, openTokenRef.current).start()
+      if (!openTokenRef.current) {
+        try {
+          openTokenRef.current = await EndpointService.openForm(form.id)
+        } catch {
+          openTokenRef.current = btoa(JSON.stringify({ formId: form.id, startAt: Date.now() }))
+        }
+      }
+
+      let file: Record<string, Any> = {}
+      try {
+        file = await new Uploader(form, values, openTokenRef.current).start()
+      } catch (uploadErr) {
+        console.warn(
+          'Uploader error, continuing submission without upload transformation:',
+          uploadErr
+        )
+      }
 
       const hiddenFields = (form!.hiddenFields || [])
         .map(field => {

@@ -452,4 +452,136 @@ test.describe('Live Production E2E Full User Journey', () => {
       expect(coverLoaded).toBe(true)
     }
   })
+
+  test('11. Cross-Device QR Code Mobile Signature Page & Real-Time Sync API', async ({ page }) => {
+    const sessionId = `test_sess_${Date.now()}`
+
+    // 11a. Verify initial session query returns null signature
+    const initRes = await fetch(`${BASE_URL}/api/signature-session/${sessionId}`)
+    expect(initRes.status).toBe(200)
+    const initJson = await initRes.json()
+    expect(initJson.signature).toBeNull()
+
+    // 11b. Navigate to mobile signature page
+    await page.goto(`${BASE_URL}/sign/${sessionId}`)
+    await page.waitForLoadState('networkidle')
+
+    // Verify touch signature canvas elements
+    const canvas = page.locator('#signature-canvas')
+    await expect(canvas).toBeVisible({ timeout: 10000 })
+    const syncBtn = page.locator('#submit-btn')
+    await expect(syncBtn).toBeVisible()
+    const clearBtn = page.locator('#clear-btn')
+    await expect(clearBtn).toBeVisible()
+
+    // 11c. Draw a signature stroke on canvas
+    const box = await canvas.boundingBox()
+    expect(box).toBeTruthy()
+    if (box) {
+      await page.mouse.move(box.x + 50, box.y + 100)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 150, box.y + 80)
+      await page.mouse.move(box.x + 250, box.y + 120)
+      await page.mouse.up()
+    }
+
+    // 11d. Click Confirm & Sync
+    await syncBtn.click()
+
+    // Verify success modal overlay appears
+    await expect(page.locator('#success-overlay')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=Signature Synced Successfully!')).toBeVisible()
+
+    // 11e. Query API session endpoint to verify signature stored in D1
+    const verifyRes = await fetch(`${BASE_URL}/api/signature-session/${sessionId}`)
+    expect(verifyRes.status).toBe(200)
+    const verifyJson = await verifyRes.json()
+    expect(verifyJson.signature).toMatch(/^data:image\/png;base64,/)
+  })
+
+  test('12. Rich HTML & Table Support in Question Description', async ({ page }) => {
+    // Log in as admin
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    const formId = '0c2b81cf9607480a'
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/create`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify Table insertion and HTML mode buttons in question description
+    const addTableBtn = page.locator('button:has-text("+ Table")').first()
+    await expect(addTableBtn).toBeVisible({ timeout: 15000 })
+
+    const htmlCodeBtn = page.locator('button:has-text("HTML Code")').first()
+    await expect(htmlCodeBtn).toBeVisible()
+
+    // Click + Table button to insert formatted table
+    await addTableBtn.click()
+
+    // Switch to HTML mode to verify table tags exist in markup
+    await htmlCodeBtn.click()
+    const htmlTextarea = page.locator('textarea').first()
+    await expect(htmlTextarea).toBeVisible({ timeout: 5000 })
+    const htmlVal = await htmlTextarea.inputValue()
+    expect(htmlVal).toContain('<table')
+    expect(htmlVal).toContain('Header 1')
+
+    // Switch back to Visual View
+    const visualBtn = page
+      .locator('button:has-text("Visual View"), button:has-text("Switch to Visual View")')
+      .first()
+    await visualBtn.click()
+
+    // Publish form with table in description
+    await page.click('button:has-text("Publish")')
+    await expect(page).toHaveURL(/.*\/form\/.*\/share/, { timeout: 15000 })
+
+    // Open public answering page and verify table renders properly
+    await page.goto(`${BASE_URL}/form/${formId}`)
+    await page.waitForLoadState('networkidle')
+
+    const tableElement = page.locator('.heyform-block-description table').first()
+    await expect(tableElement).toBeVisible({ timeout: 15000 })
+    await expect(
+      page.locator('.heyform-block-description th:has-text("Header 1")').first()
+    ).toBeVisible()
+    await expect(
+      page.locator('.heyform-block-description td:has-text("Row 1 Col 1")').first()
+    ).toBeVisible()
+  })
+
+  test('13. Advanced Value Check Feature in Form Builder Settings & Answering', async ({
+    page
+  }) => {
+    // Log in as admin
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    const formId = '0c2b81cf9607480a'
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/create`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify Advanced Value Check option in right sidebar
+    const advCheckLabel = page.locator('text=Advanced Value Check').first()
+    await expect(advCheckLabel).toBeVisible({ timeout: 15000 })
+
+    const checkTypeLabel = page.locator('text=Check Type')
+    if (!(await checkTypeLabel.isVisible())) {
+      await advCheckLabel.click()
+    }
+
+    // Verify rule options (Check Type dropdown and Custom Error Message)
+    await expect(checkTypeLabel).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('text=Custom Error Message')).toBeVisible()
+  })
 })

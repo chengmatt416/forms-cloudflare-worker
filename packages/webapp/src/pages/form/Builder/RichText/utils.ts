@@ -131,7 +131,33 @@ export function insertClipboardText(event: any) {
 }
 
 export function insertClipboardHTML(event: ClipboardEvent) {
-  document.execCommand('insertText', false, event.clipboardData.getData('text'))
+  const html = event.clipboardData.getData('text/html')
+  if (
+    html &&
+    (html.includes('<table') ||
+      html.includes('<td') ||
+      html.includes('<p') ||
+      html.includes('<div') ||
+      html.includes('<span') ||
+      html.includes('<ul') ||
+      html.includes('<ol'))
+  ) {
+    document.execCommand('insertHTML', false, html)
+    return
+  }
+  const text = event.clipboardData.getData('text/plain') || event.clipboardData.getData('text')
+  if (
+    text &&
+    (text.includes('<table') ||
+      text.includes('</') ||
+      text.includes('<div') ||
+      text.includes('<p>') ||
+      text.includes('<tr'))
+  ) {
+    document.execCommand('insertHTML', false, text)
+    return
+  }
+  document.execCommand('insertText', false, text)
 }
 
 export function replaceTriggerText(

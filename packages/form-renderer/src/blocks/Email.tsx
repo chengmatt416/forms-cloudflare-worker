@@ -1,6 +1,6 @@
 import type { FC } from 'react'
 
-import { useTranslation } from '../utils'
+import { useTranslation, validateAdvancedValue } from '../utils'
 
 import { FormField, Input } from '../components'
 import { useStore } from '../store'
@@ -32,6 +32,12 @@ export const Email: FC<BlockProps> = ({ field, ...restProps }) => {
               required: field.validations?.required,
               type: 'email',
               message: t('This field is required')
+            },
+            {
+              validator: async (_, val) => {
+                const err = validateAdvancedValue(field, val, t)
+                if (err) throw new Error(err)
+              }
             }
           ]}
         >

@@ -69,12 +69,14 @@ const LogicItem: FC<LogicItemProps> = ({ fields, logic }) => {
 
   return (
     <li className="flex items-center gap-x-4">
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
           <QuestionIcon kind={field.kind} index={field.index} parentIndex={field.parent?.index} />
-          <span className="text-sm/6 font-medium">{htmlUtils.plain(field.title as string)}</span>
+          <span className="min-w-0 flex-1 truncate text-sm/6 font-medium">
+            {htmlUtils.plain(field.title as string)}
+          </span>
         </div>
-        <div className="text-secondary text-xs/6">
+        <div className="text-secondary truncate text-xs/6">
           {t('form.builder.logic.rule.ruleCount', { count })}
         </div>
       </div>
@@ -110,7 +112,7 @@ export const Rules: FC = () => {
         <span className="font-medium">{t('form.builder.logic.rule.headline')}</span>
 
         <Button.Link
-          className="text-secondary hover:text-primary !pl-2 !pr-0.5 [&_[data-slot=button]]:gap-x-0"
+          className="text-secondary hover:text-primary !pr-0.5 !pl-2 [&_[data-slot=button]]:gap-x-0"
           size="sm"
           onClick={() => openModal('LogicBulkEditModal')}
         >

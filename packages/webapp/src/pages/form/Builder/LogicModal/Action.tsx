@@ -17,6 +17,7 @@ import { QuestionIcon } from '../LeftSidebar/QuestionList'
 
 interface QuestionSelectProps {
   fields: FormFieldType[]
+  currentField: FormFieldType
   value?: string
   onChange?: (value: string) => void
 }
@@ -29,21 +30,38 @@ interface ActionProps {
   onChange?: (value: LogicAction) => void
 }
 
-const QuestionSelect: FC<QuestionSelectProps> = ({ fields, value, onChange }) => {
+const QuestionSelect: FC<QuestionSelectProps> = ({ fields, currentField, value, onChange }) => {
+  const { t } = useTranslation()
+
   const options = useMemo(
     () =>
-      fields.map(row => ({
-        value: row.id,
-        label: (
-          <div className="flex w-full items-center gap-x-2">
-            <QuestionIcon kind={row.kind} index={row.index} parentIndex={row.parent?.index} />
-            <span className="flex-1 truncate text-left">
-              {htmlUtils.plain(row.title as string)}
-            </span>
-          </div>
-        )
-      })),
-    [fields]
+      fields.map(row => {
+        const isPrevious =
+          helper.isValid(row.index) &&
+          helper.isValid(currentField?.index) &&
+          row.index! < currentField.index!
+
+        return {
+          value: row.id,
+          label: (
+            <div className="flex w-full min-w-0 items-center gap-x-2">
+              <QuestionIcon kind={row.kind} index={row.index} parentIndex={row.parent?.index} />
+              <span className="flex-1 truncate text-left">
+                {htmlUtils.plain(row.title as string) ||
+                  (row.kind === FieldKindEnum.THANK_YOU
+                    ? t('form.builder.thankYou.title')
+                    : t('form.builder.compose.untitled'))}
+              </span>
+              {isPrevious && (
+                <span className="shrink-0 rounded border border-amber-200/60 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-400">
+                  {t('Previous')}
+                </span>
+              )}
+            </div>
+          )
+        }
+      }),
+    [fields, currentField, t]
   )
 
   return <Select options={options} value={value} onChange={onChange} />
@@ -65,9 +83,8 @@ export default function Action({
 
   const fields = useMemo(() => {
     const tmpFields = flattenFieldsWithGroups(rawFields)
-    const index = tmpFields.findIndex(f => f.id === currentField.id)
-
-    return tmpFields.slice(index + 1)
+    // Allow jumping to any question or ending, except the current field itself
+    return tmpFields.filter(f => f.id !== currentField.id)
   }, [rawFields, currentField])
 
   function handleKindChange(kind: any) {
@@ -146,7 +163,12 @@ export default function Action({
         onChange={handleKindChange}
       />
       {value.kind === ActionEnum.NAVIGATE ? (
-        <QuestionSelect fields={fields} value={value.fieldId} onChange={handleFieldChange} />
+        <QuestionSelect
+          fields={fields}
+          currentField={currentField}
+          value={value.fieldId}
+          onChange={handleFieldChange}
+        />
       ) : helper.isValidArray(variables) ? (
         <>
           <Select

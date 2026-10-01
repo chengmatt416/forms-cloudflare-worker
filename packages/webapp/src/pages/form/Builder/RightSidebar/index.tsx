@@ -43,9 +43,9 @@ export default function BuilderRightSidebar() {
   }
 
   return (
-    <div className="lg:bg-foreground lg:ring-primary/5 h-full w-[20rem] max-lg:hidden lg:rounded-lg lg:shadow-sm lg:ring-1">
+    <div className="lg:bg-foreground lg:ring-primary/5 flex h-full w-[20rem] flex-col overflow-hidden max-lg:hidden lg:rounded-lg lg:shadow-sm lg:ring-1">
       <Tabs
-        className="[&_[data-slot=content]]:scrollbar flex h-full flex-col [&_[data-slot=content]]:flex-1"
+        className="[&_[data-slot=content]]:scrollbar flex h-full flex-col [&_[data-slot=content]]:min-h-0 [&_[data-slot=content]]:flex-1 [&_[data-slot=content]]:overflow-x-hidden [&_[data-slot=content]]:overflow-y-auto"
         tabs={tabs}
         defaultTab="question"
         onChange={handleChange}

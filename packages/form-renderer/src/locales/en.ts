@@ -27,6 +27,18 @@ export default {
   'Choose {{max}} choices': 'Choose {{max}} choices',
   'Choose between {{min}} to {{max}} choices': 'Choose between {{min}} to {{max}} choices',
   'Draw your signature above': 'Draw your signature above',
+  'Trackpad Mode': 'Trackpad Mode',
+  'Sign on Phone': 'Sign on Phone',
+  'Scan to Sign on Phone': 'Scan to Sign on Phone',
+  'Scan with phone camera to sign on touch screen':
+    'Scan with phone camera to sign on touch screen',
+  'Waiting for signature from phone...': 'Waiting for signature from phone...',
+  'Signature synced!': 'Signature synced!',
+  'Trackpad Mode Active - Glide finger on trackpad to write':
+    'Trackpad Mode Active - Glide finger on trackpad to write',
+  'Press Space to toggle pen up/down. Press ESC or click Done to finish':
+    'Press Space to toggle pen up/down. Press ESC or click Done to finish',
+  Done: 'Done',
   Clear: 'Clear',
   Yes: 'Yes',
   No: 'No',

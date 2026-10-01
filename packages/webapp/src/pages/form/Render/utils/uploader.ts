@@ -26,7 +26,12 @@ export class Uploader {
 
         if (helper.isValid(value)) {
           if (row.kind === FieldKindEnum.SIGNATURE) {
-            value = this.b64ImageURLToBlob(value as string) as File
+            if (typeof value === 'string' && value.startsWith('data:')) {
+              const blob = this.b64ImageURLToBlob(value as string)
+              if (blob) {
+                value = blob as File
+              }
+            }
           }
 
           this.fields.push({
@@ -60,31 +65,49 @@ export class Uploader {
   }
 
   async uploadFile(field: UploaderField): Promise<Record<string, FileUploadValue | string>> {
-    const result = await UploadService.upload(field.value as File, {
-      fieldId: field.id,
-      formId: this.form.id,
-      openToken: this.openToken
-    })
+    try {
+      if (
+        typeof field.value === 'string' &&
+        (field.value.startsWith('http://') || field.value.startsWith('https://'))
+      ) {
+        return { [field.id]: field.value }
+      }
+      const result = await UploadService.upload(field.value as File, {
+        fieldId: field.id,
+        formId: this.form.id,
+        openToken: this.openToken
+      })
 
-    return {
-      [field.id]: field.kind === FieldKindEnum.SIGNATURE ? result.url : result
+      return {
+        [field.id]: field.kind === FieldKindEnum.SIGNATURE ? result.url : result
+      }
+    } catch (err) {
+      console.warn('File upload fallback for field', field.id, err)
+      return { [field.id]: field.value as any }
     }
   }
 
-  b64ImageURLToBlob(b64ImageURL: string): Blob {
-    const [prefix, data] = b64ImageURL.split(',')
-    const type = prefix.split(':')[1].split(';')[0]
-    const bytes = atob(data)
-    const arrayBuffer = new ArrayBuffer(bytes.length)
-    const intArray = new Uint8Array(arrayBuffer)
+  b64ImageURLToBlob(b64ImageURL: string): Blob | null {
+    try {
+      if (!b64ImageURL || typeof b64ImageURL !== 'string' || !b64ImageURL.includes(',')) {
+        return null
+      }
+      const [prefix, data] = b64ImageURL.split(',')
+      const type = (prefix.split(':')[1] || '').split(';')[0] || 'image/png'
+      const bytes = atob(data)
+      const arrayBuffer = new ArrayBuffer(bytes.length)
+      const intArray = new Uint8Array(arrayBuffer)
 
-    for (let i = 0; i < bytes.length; i++) {
-      intArray[i] = bytes.charCodeAt(i)
+      for (let i = 0; i < bytes.length; i++) {
+        intArray[i] = bytes.charCodeAt(i)
+      }
+
+      const blob: Any = new Blob([intArray], { type })
+      blob.name = 'signature.png'
+
+      return blob
+    } catch {
+      return null
     }
-
-    const blob: Any = new Blob([intArray], { type })
-    blob.name = 'signature.png'
-
-    return blob
   }
 }

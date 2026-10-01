@@ -77,11 +77,17 @@ const CircularProgressbar: FC<CircularProgressbarProps> = ({
 export const Progress: FC = () => {
   const { t } = useTranslation()
   const { state } = useStore()
+  const percent =
+    typeof state.percentage === 'number' && !isNaN(state.percentage) ? state.percentage : 0
+  let text = t('{{number}}% answered', { number: percent })
+  if (text.includes('{{number}}')) {
+    text = text.replace(/\{\{number\}\}/g, String(percent))
+  }
 
   return (
     <div className="heyform-progress">
-      <CircularProgressbar current={state.percentage} />
-      <span>{t('{{number}}% answered', { number: state.percentage })}</span>
+      <CircularProgressbar current={percent} />
+      <span>{text}</span>
     </div>
   )
 }

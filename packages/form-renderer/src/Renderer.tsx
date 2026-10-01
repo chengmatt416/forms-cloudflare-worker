@@ -10,8 +10,12 @@ import clsx from 'clsx'
 import type { FC } from 'react'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 
-import { flattenFieldsWithGroups, parseFields, progressPercentage } from './utils'
-import { applyLogicToFields } from '@heyform-inc/answer-utils'
+import {
+  applyEnhancedLogicToFields as applyLogicToFields,
+  flattenFieldsWithGroups,
+  parseFields,
+  progressPercentage
+} from './utils'
 import { helper, nanoid } from '@heyform-inc/utils'
 
 import { ClosedMessage } from './blocks/ClosedMessage'
