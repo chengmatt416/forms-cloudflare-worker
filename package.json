@@ -19,6 +19,7 @@
     "deploy:worker": "pnpm --filter ./packages/webapp build && pnpm --filter @heyform/worker deploy",
     "format": "prettier --write \"packages/**/*.{js,ts,tsx,css}\"",
     "lint": "node scripts/run-oxlint.js packages",
+    "test:e2e": "playwright test",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -77,5 +78,9 @@
       "react": "^19.0.0",
       "react-dom": "^19.0.0"
     }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "playwright": "^1.63.0"
   }
 }

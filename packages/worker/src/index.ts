@@ -161,8 +161,7 @@ app.all('*', async c => {
 
     // For HTML / SPA page requests, load index.html and inject runtime config
     const indexUrl = new URL('/index.html', url.origin)
-    const indexRequest = new Request(indexUrl.toString(), c.req.raw)
-    const indexResponse = await c.env.ASSETS.fetch(indexRequest)
+    const indexResponse = await c.env.ASSETS.fetch(new Request(indexUrl.toString()))
     let html = await indexResponse.text()
 
     const runtimeScript = `<script>

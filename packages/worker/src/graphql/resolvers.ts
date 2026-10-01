@@ -50,6 +50,11 @@ function isUserAdmin(user: User | null): boolean {
   return user.email.toLowerCase() === 'pinyencheng@gmail.com' || user.role === 'admin'
 }
 
+function toUnix(val?: number | null): number {
+  if (!val) return Math.floor(Date.now() / 1000)
+  return val > 1e11 ? Math.floor(val / 1000) : Math.floor(val)
+}
+
 function formatFormListItem(f: FormRow) {
   return {
     id: f.id,
@@ -64,11 +69,11 @@ function formatFormListItem(f: FormRow) {
     version: f.version,
     isDraft: Boolean(f.is_draft),
     canPublish: Boolean(f.can_publish),
-    fieldsUpdatedAt: f.updated_at,
+    fieldsUpdatedAt: toUnix(f.updated_at),
     retentionAt: null,
     suspended: false,
     status: f.status,
-    updatedAt: f.updated_at
+    updatedAt: toUnix(f.updated_at)
   }
 }
 
@@ -255,7 +260,7 @@ export const rootResolver = {
         inviteCode: null,
         inviteCodeExpireAt: null,
         removeBranding: true,
-        createdAt: team.created_at,
+        createdAt: toUnix(team.created_at),
         projects: projectItems,
         brandKits: []
       })
@@ -323,11 +328,11 @@ export const rootResolver = {
       retentionAt: null,
       suspended: false,
       status: f.status,
-      updatedAt: f.updated_at,
+      updatedAt: toUnix(f.updated_at),
       version: f.version,
       isDraft: Boolean(f.is_draft),
       canPublish: Boolean(f.can_publish),
-      fieldsUpdatedAt: f.updated_at
+      fieldsUpdatedAt: toUnix(f.updated_at)
     }))
   },
 
@@ -806,11 +811,11 @@ export const rootResolver = {
       version: f.version,
       isDraft: Boolean(f.is_draft),
       canPublish: Boolean(f.can_publish),
-      fieldsUpdatedAt: f.updated_at,
+      fieldsUpdatedAt: toUnix(f.updated_at),
       submissionCount: f.submission_count,
       customReport: { id: '', hiddenFields: [], theme: {}, enablePublicAccess: false },
       status: f.status,
-      updatedAt: f.updated_at
+      updatedAt: toUnix(f.updated_at)
     }
   },
 
@@ -857,7 +862,7 @@ export const rootResolver = {
       hiddenFields,
       logics: parseJSON(f.logics, []),
       variables: parseJSON(f.variables, []),
-      fieldsUpdatedAt: f.updated_at,
+      fieldsUpdatedAt: toUnix(f.updated_at),
       themeSettings,
       retentionAt: null,
       suspended: false,
@@ -1387,18 +1392,65 @@ export const rootResolver = {
       .bind(input.formId, limit, offset)
       .all<SubmissionRow>()
 
-    const items = (subs.results || []).map(s => ({
-      id: s.id,
-      formId: s.form_id,
-      category: s.category,
-      status: s.status,
-      answers: parseJSON(s.answers, {}),
-      hiddenFields: parseJSON(s.hidden_fields, []),
-      variables: parseJSON(s.variables, []),
-      startAt: s.start_at,
-      endAt: s.end_at,
-      createdAt: s.created_at
-    }))
+    const f = await context.env.DB.prepare('SELECT fields, drafts FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    const formFields = [
+      ...(parseJSON<any[]>(f?.fields, []) || []),
+      ...(parseJSON<any[]>(f?.drafts, []) || [])
+    ]
+    const kindMap: Record<string, string> = {}
+    for (const fld of formFields) {
+      if (fld?.id) kindMap[fld.id] = fld.kind || 'short_text'
+    }
+
+    const mapSubmission = (s: SubmissionRow) => {
+      const rawAnswers = parseJSON<Record<string, any>>(s.answers, {})
+      let answersArr: any[] = []
+      if (Array.isArray(rawAnswers)) {
+        answersArr = rawAnswers
+      } else if (rawAnswers && typeof rawAnswers === 'object') {
+        answersArr = Object.entries(rawAnswers).map(([key, val]) => {
+          const v =
+            typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val
+          return {
+            id: key,
+            kind: kindMap[key] || 'short_text',
+            value: v
+          }
+        })
+      }
+
+      const firstVal = Object.values(rawAnswers)[0] as any
+      const title =
+        typeof firstVal === 'string'
+          ? firstVal
+          : firstVal?.value
+            ? String(firstVal.value)
+            : 'Submission'
+      const rawHidden = parseJSON(s.hidden_fields, [])
+      const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
+        typeof h === 'string'
+          ? { id: h, name: h, value: '' }
+          : { id: h.id || h.name || '', name: h.name || h.id || '', value: h.value || '' }
+      )
+
+      return {
+        id: s.id,
+        formId: s.form_id,
+        category: s.category || 'inbox',
+        status: s.status || 'public',
+        title,
+        answers: answersArr,
+        hiddenFields,
+        variables: parseJSON(s.variables, []),
+        startAt: toUnix(s.start_at),
+        endAt: toUnix(s.end_at),
+        createdAt: toUnix(s.created_at)
+      }
+    }
+
+    const items = (subs.results || []).map(mapSubmission)
 
     return {
       total: countRes?.count || 0,
@@ -1413,17 +1465,60 @@ export const rootResolver = {
 
     if (!s) throw new Error('Submission not found')
 
+    const f = await context.env.DB.prepare('SELECT fields, drafts FROM forms WHERE id = ?')
+      .bind(s.form_id)
+      .first<FormRow>()
+    const formFields = [
+      ...(parseJSON<any[]>(f?.fields, []) || []),
+      ...(parseJSON<any[]>(f?.drafts, []) || [])
+    ]
+    const kindMap: Record<string, string> = {}
+    for (const fld of formFields) {
+      if (fld?.id) kindMap[fld.id] = fld.kind || 'short_text'
+    }
+
+    const rawAnswers = parseJSON<Record<string, any>>(s.answers, {})
+    let answersArr: any[] = []
+    if (Array.isArray(rawAnswers)) {
+      answersArr = rawAnswers
+    } else if (rawAnswers && typeof rawAnswers === 'object') {
+      answersArr = Object.entries(rawAnswers).map(([key, val]) => {
+        const v =
+          typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val
+        return {
+          id: key,
+          kind: kindMap[key] || 'short_text',
+          value: v
+        }
+      })
+    }
+
+    const firstVal = Object.values(rawAnswers)[0] as any
+    const title =
+      typeof firstVal === 'string'
+        ? firstVal
+        : firstVal?.value
+          ? String(firstVal.value)
+          : 'Submission'
+    const rawHidden = parseJSON(s.hidden_fields, [])
+    const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
+      typeof h === 'string'
+        ? { id: h, name: h, value: '' }
+        : { id: h.id || h.name || '', name: h.name || h.id || '', value: h.value || '' }
+    )
+
     return {
       id: s.id,
       formId: s.form_id,
-      category: s.category,
-      status: s.status,
-      answers: parseJSON(s.answers, {}),
-      hiddenFields: parseJSON(s.hidden_fields, []),
+      category: s.category || 'inbox',
+      status: s.status || 'public',
+      title,
+      answers: answersArr,
+      hiddenFields,
       variables: parseJSON(s.variables, []),
-      startAt: s.start_at,
-      endAt: s.end_at,
-      createdAt: s.created_at
+      startAt: toUnix(s.start_at),
+      endAt: toUnix(s.end_at),
+      createdAt: toUnix(s.created_at)
     }
   },
 

@@ -279,30 +279,38 @@ export const typeDefs = `
     clientSecret: String
   }
 
+  type SubmissionHiddenField {
+    id: String
+    name: String
+    value: String
+  }
+
   type SubmissionItem {
     id: String!
-    formId: String!
+    formId: String
     category: String!
-    status: String!
+    status: String
+    title: String
     answers: JSON
-    hiddenFields: [JSON]
+    hiddenFields: [SubmissionHiddenField!]
     variables: [JSON]
     startAt: Float
     endAt: Float
-    createdAt: Float!
+    createdAt: Float
   }
 
   type SubmissionDetail {
     id: String!
-    formId: String!
+    formId: String
     category: String!
-    status: String!
+    status: String
+    title: String
     answers: JSON
-    hiddenFields: [JSON]
+    hiddenFields: [SubmissionHiddenField!]
     variables: [JSON]
     startAt: Float
     endAt: Float
-    createdAt: Float!
+    createdAt: Float
   }
 
   type FormReport {
