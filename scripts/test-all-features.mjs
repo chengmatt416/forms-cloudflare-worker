@@ -468,12 +468,20 @@ async function runTests() {
     const templatedForm = templatedFormRes.json?.data?.formDetail
     assert(templatedForm?.drafts?.length >= 3, `Templated form has ${templatedForm?.drafts?.length} drafts loaded`)
 
-    // Start from Scratch with initial drafts
+    // Start from Scratch with exact webapp payload (interactiveMode: 1, kind: 1, nameSchema: [])
     const scratchRes = await gql(
       `mutation CreateForm($input: CreateFormInput!) {
         createForm(input: $input)
       }`,
-      { input: { projectId: testProjectId, name: 'Scratch Blank Form' } },
+      {
+        input: {
+          projectId: testProjectId,
+          name: '未命名',
+          nameSchema: [],
+          interactiveMode: 1,
+          kind: 1
+        }
+      },
       adminCookies
     )
     const scratchFormId = scratchRes.json?.data?.createForm
@@ -481,15 +489,47 @@ async function runTests() {
 
     const scratchDetailRes = await gql(
       `query FormDetail($input: FormDetailInput!) {
-        formDetail(input: $input) { id name drafts { id kind title } }
+        formDetail(input: $input) {
+          id
+          projectId
+          teamId
+          name
+          interactiveMode
+          kind
+          drafts { id kind title width hide frozen }
+        }
       }`,
       { input: { formId: scratchFormId } },
       adminCookies
     )
     const scratchForm = scratchDetailRes.json?.data?.formDetail
+    assert(scratchForm?.projectId === testProjectId, `FormDetail correctly returns projectId: ${scratchForm?.projectId}`)
+    assert(scratchForm?.interactiveMode === 1, `FormDetail returns numeric interactiveMode: ${scratchForm?.interactiveMode}`)
+    assert(scratchForm?.kind === 1, `FormDetail returns numeric kind: ${scratchForm?.kind}`)
     assert(scratchForm?.drafts?.length >= 2, `Scratch form initialized with ${scratchForm?.drafts?.length} drafts (first question + thank-you screen)`)
     assert(scratchForm?.drafts?.some(d => d.kind === 'short_text'), 'Scratch form contains starting short_text question')
     assert(scratchForm?.drafts?.some(d => d.kind === 'thank_you'), 'Scratch form contains thank_you screen')
+
+    // Duplicate form mutation test
+    const dupRes = await gql(
+      `mutation DuplicateForm($input: DuplicateFormInput!) {
+        duplicateForm(input: $input)
+      }`,
+      { input: { formId: scratchFormId, name: 'Duplicated Form' } },
+      adminCookies
+    )
+    const dupId = dupRes.json?.data?.duplicateForm
+    assert(Boolean(dupId), `Duplicated form created with ID: ${dupId}`)
+
+    // Delete form mutation test
+    const delRes = await gql(
+      `mutation DeleteForm($input: FormDetailInput!) {
+        deleteForm(input: $input)
+      }`,
+      { input: { formId: dupId } },
+      adminCookies
+    )
+    assert(delRes.json?.data?.deleteForm === true, 'Deleted form with FormDetailInput')
   }
 
   // 11. Image Proxy / Resizer Endpoint

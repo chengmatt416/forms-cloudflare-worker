@@ -125,6 +125,9 @@ export const typeDefs = `
     validations: JSON
     properties: JSON
     layout: JSON
+    width: Int
+    hide: Boolean
+    frozen: Boolean
   }
 
   type HiddenField {
@@ -149,8 +152,8 @@ export const typeDefs = `
     projectId: String!
     memberId: String!
     name: String!
-    interactiveMode: String
-    kind: String
+    interactiveMode: Int
+    kind: Int
     submissionCount: Int
     settings: FormSettings
     version: Int
@@ -169,8 +172,8 @@ export const typeDefs = `
     projectId: String!
     memberId: String!
     name: String!
-    interactiveMode: String
-    kind: String
+    interactiveMode: Int
+    kind: Int
     submissionCount: Int
     settings: FormSettings
     retentionAt: Float
@@ -193,11 +196,12 @@ export const typeDefs = `
   type FormDetail {
     id: String!
     teamId: String!
+    projectId: String!
     memberId: String!
     name: String!
     description: String
-    interactiveMode: String
-    kind: String
+    interactiveMode: Int
+    kind: Int
     stripeAccount: StripeAccount
     settings: FormSettings
     drafts: [FormField!]
@@ -226,8 +230,8 @@ export const typeDefs = `
     memberId: String!
     name: String!
     description: String
-    interactiveMode: String
-    kind: String
+    interactiveMode: Int
+    kind: Int
     stripeAccount: StripeAccount
     settings: FormSettings
     drafts: [FormField!]
@@ -318,6 +322,8 @@ export const typeDefs = `
     category: String
     thumbnail: String
     description: String
+    interactiveMode: Int
+    kind: Int
     fields: [FormField!]
     themeSettings: ThemeSettings
   }
@@ -390,17 +396,21 @@ export const typeDefs = `
   input CreateFormInput {
     projectId: String
     name: String
-    interactiveMode: String
+    nameSchema: [JSON]
+    interactiveMode: Int
+    kind: Int
   }
 
   input TemplateDetailInput {
     templateId: String!
+    templateSlug: String
   }
 
   input UseTemplateInput {
     projectId: String
     templateId: String!
     recordId: String
+    name: String
   }
 
   input CreateFormWithAIInput {
@@ -409,12 +419,68 @@ export const typeDefs = `
     reference: String
   }
 
+  input CreateFieldsWithAIInput {
+    formId: String!
+    prompt: String!
+  }
+
+  input CreateFormThemeWithAIInput {
+    formId: String!
+    prompt: String!
+    theme: String!
+  }
+
+  input DuplicateFormInput {
+    formId: String!
+    name: String!
+  }
+
+  input UpdateFormArchiveInput {
+    formId: String!
+    allowArchive: Boolean!
+  }
+
   input UpdateFormInput {
     formId: String!
     name: String
     description: String
-    interactiveMode: String
+    interactiveMode: Int
+    kind: Int
     settings: JSON
+    status: String
+    captchaKind: Int
+    active: Boolean
+    enableExpirationDate: Boolean
+    expirationTimeZone: String
+    enabledAt: Float
+    closedAt: Float
+    enableTimeLimit: Boolean
+    timeLimit: Float
+    filterSpam: Boolean
+    password: String
+    requirePassword: Boolean
+    languages: [String]
+    redirectUrl: String
+    redirectOnCompletion: Boolean
+    redirectDelay: Float
+    enableQuotaLimit: Boolean
+    quotaLimit: Int
+    enableIpLimit: Boolean
+    ipLimitCount: Int
+    ipLimitTime: Float
+    enableProgress: Boolean
+    enableQuestionList: Boolean
+    enableNavigationArrows: Boolean
+    emailNotification: String
+    locale: String
+    enableClosedMessage: Boolean
+    closedFormTitle: String
+    closedFormDescription: String
+    allowArchive: Boolean
+    metaTitle: String
+    metaDescription: String
+    metaOGImageUrl: String
+    enableEmailNotification: Boolean
   }
 
   input UpdateFormSchemasInput {
@@ -425,6 +491,7 @@ export const typeDefs = `
 
   input DeleteFormFieldInput {
     formId: String!
+    fieldId: String
   }
 
   input UpdateFormThemeInput {
@@ -526,10 +593,18 @@ export const typeDefs = `
     useTemplate(input: UseTemplateInput!): String!
     createFormWithAI(input: CreateFormWithAIInput!): String!
     createWithAI(input: CreateFormWithAIInput!): String!
+    createFieldsWithAI(input: CreateFieldsWithAIInput!): Boolean!
+    createFormLogicsWithAI(input: CreateFieldsWithAIInput!): Boolean!
+    createFormThemeWithAI(input: CreateFormThemeWithAIInput!): Boolean!
+    duplicateForm(input: DuplicateFormInput!): String!
+    moveFormToTrash(input: FormDetailInput!): Boolean!
+    restoreForm(input: FormDetailInput!): Boolean!
+    deleteForm(input: FormDetailInput!): Boolean!
+    deleteFormField(input: DeleteFormFieldInput!): Boolean!
     updateForm(input: UpdateFormInput!): Boolean!
+    updateFormArchive(input: UpdateFormArchiveInput!): Boolean!
     updateFormSchemas(input: UpdateFormSchemasInput!): UpdateFormSchemasOutput!
     publishForm(input: UpdateFormSchemasInput!): Boolean!
-    deleteForm(input: DeleteFormFieldInput!): Boolean!
     updateFormTheme(input: UpdateFormThemeInput!): Boolean!
     updateFormLogics(input: UpdateFormLogicsInput!): Boolean!
     updateFormVariables(input: UpdateFormVariablesInput!): Boolean!

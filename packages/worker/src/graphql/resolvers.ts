@@ -28,10 +28,21 @@ function normalizeField(f: any): any {
     id: f.id || generateId(),
     kind: f.kind || f.type || 'short_text',
     title: f.title ?? null,
+    titleSchema: f.titleSchema ?? null,
     description: f.description ?? null,
     validations: f.validations || {},
-    properties: f.properties || {}
+    properties: f.properties || {},
+    layout: f.layout || null,
+    width: f.width ?? null,
+    hide: f.hide ?? null,
+    frozen: f.frozen ?? null
   }
+}
+
+function toIntEnum(val: any, fallback = 1): number {
+  if (val == null) return fallback
+  const num = Number(val)
+  return isNaN(num) ? fallback : num
 }
 
 function isUserAdmin(user: User | null): boolean {
@@ -283,8 +294,8 @@ export const rootResolver = {
       projectId: f.project_id,
       memberId: f.member_id,
       name: f.name,
-      interactiveMode: f.interactive_mode,
-      kind: f.kind,
+      interactiveMode: toIntEnum(f.interactive_mode, 1),
+      kind: toIntEnum(f.kind, 1),
       submissionCount: f.submission_count,
       settings: parseJSON(f.settings, {}),
       retentionAt: null,
@@ -394,8 +405,8 @@ export const rootResolver = {
       projectId: f.project_id,
       memberId: f.member_id,
       name: f.name,
-      interactiveMode: f.interactive_mode,
-      kind: f.kind,
+      interactiveMode: toIntEnum(f.interactive_mode, 1),
+      kind: toIntEnum(f.kind, 1),
       submissionCount: f.submission_count,
       settings: parseJSON(f.settings, { active: true }),
       version: f.version,
@@ -494,8 +505,8 @@ export const rootResolver = {
         project.id,
         context.user.id,
         input.name || 'Untitled Form',
-        input.interactiveMode || 'default',
-        'survey',
+        toIntEnum(input.interactiveMode, 1),
+        toIntEnum(input.kind, 1),
         JSON.stringify(initialDrafts),
         defaultSettings,
         now,
@@ -553,6 +564,8 @@ export const rootResolver = {
       enableNavigationArrows: true
     })
 
+    const rawFields = (template.fields || []).map(normalizeField)
+
     await context.env.DB.prepare(
       `INSERT INTO forms (
         id, team_id, project_id, member_id, name, interactive_mode, kind,
@@ -565,10 +578,10 @@ export const rootResolver = {
         project.team_id,
         project.id,
         context.user.id,
-        template.name,
-        template.interactiveMode || 'default',
-        template.kind || 'survey',
-        JSON.stringify(template.fields),
+        input.name || template.name,
+        toIntEnum(template.interactiveMode, 1),
+        toIntEnum(template.kind, 1),
+        JSON.stringify(rawFields),
         defaultSettings,
         JSON.stringify(template.themeSettings || {}),
         now,
@@ -727,11 +740,12 @@ export const rootResolver = {
     return {
       id: f.id,
       teamId: f.team_id,
+      projectId: f.project_id,
       memberId: f.member_id,
       name: f.name,
       description: f.description,
-      interactiveMode: f.interactive_mode,
-      kind: f.kind,
+      interactiveMode: toIntEnum(f.interactive_mode, 1),
+      kind: toIntEnum(f.kind, 1),
       stripeAccount: null,
       settings,
       drafts: (parseJSON<any[]>(f.drafts, []) || []).map(normalizeField),
@@ -787,8 +801,8 @@ export const rootResolver = {
       memberId: f.member_id,
       name: f.name,
       description: f.description,
-      interactiveMode: f.interactive_mode,
-      kind: f.kind,
+      interactiveMode: toIntEnum(f.interactive_mode, 1),
+      kind: toIntEnum(f.kind, 1),
       stripeAccount: null,
       settings,
       drafts: drafts.length > 0 ? drafts : fields,
@@ -835,7 +849,7 @@ export const rootResolver = {
 
     return {
       version: f?.version || 1,
-      drafts: parseJSON(f?.drafts, []),
+      drafts: (parseJSON<any[]>(f?.drafts, []) || []).map(normalizeField),
       canPublish: Boolean(f?.can_publish)
     }
   },
@@ -868,10 +882,52 @@ export const rootResolver = {
       .bind(input.formId)
       .first<FormRow>()
 
-    let currentSettings = parseJSON(form?.settings, {})
+    let currentSettings = parseJSON<any>(form?.settings, {})
     if (input.settings) {
       currentSettings = { ...currentSettings, ...input.settings }
     }
+    const settingKeys = [
+      'captchaKind',
+      'googleRecaptchaKey',
+      'active',
+      'enableExpirationDate',
+      'expirationTimeZone',
+      'enabledAt',
+      'closedAt',
+      'enableTimeLimit',
+      'timeLimit',
+      'filterSpam',
+      'password',
+      'requirePassword',
+      'languages',
+      'redirectUrl',
+      'redirectOnCompletion',
+      'redirectDelay',
+      'enableQuotaLimit',
+      'quotaLimit',
+      'enableIpLimit',
+      'ipLimitCount',
+      'ipLimitTime',
+      'enableProgress',
+      'enableQuestionList',
+      'enableNavigationArrows',
+      'emailNotification',
+      'locale',
+      'enableClosedMessage',
+      'closedFormTitle',
+      'closedFormDescription',
+      'allowArchive',
+      'metaTitle',
+      'metaDescription',
+      'metaOGImageUrl',
+      'enableEmailNotification'
+    ]
+    for (const key of settingKeys) {
+      if (input[key] !== undefined) {
+        currentSettings[key] = input[key]
+      }
+    }
+    currentSettings.removeBranding = true
 
     await context.env.DB.prepare(
       `
@@ -879,6 +935,8 @@ export const rootResolver = {
         name = COALESCE(?, name),
         description = COALESCE(?, description),
         interactive_mode = COALESCE(?, interactive_mode),
+        kind = COALESCE(?, kind),
+        status = COALESCE(?, status),
         settings = ?,
         updated_at = ?
       WHERE id = ?
@@ -887,7 +945,9 @@ export const rootResolver = {
       .bind(
         input.name ?? null,
         input.description ?? null,
-        input.interactiveMode ?? null,
+        input.interactiveMode != null ? toIntEnum(input.interactiveMode, 1) : null,
+        input.kind != null ? toIntEnum(input.kind, 1) : null,
+        input.status ?? null,
         JSON.stringify(currentSettings),
         now,
         input.formId
@@ -903,6 +963,115 @@ export const rootResolver = {
       .run()
     return true
   },
+
+  deleteFormField: async ({ input }: any, context: GraphQLContext) => {
+    const form = await context.env.DB.prepare('SELECT drafts, fields FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    if (!form) return false
+    const drafts = (parseJSON<any[]>(form.drafts, []) || []).filter(
+      (f: any) => f.id !== input.fieldId
+    )
+    const fields = (parseJSON<any[]>(form.fields, []) || []).filter(
+      (f: any) => f.id !== input.fieldId
+    )
+    await context.env.DB.prepare(
+      'UPDATE forms SET drafts = ?, fields = ?, updated_at = ? WHERE id = ?'
+    )
+      .bind(JSON.stringify(drafts), JSON.stringify(fields), Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  moveFormToTrash: async ({ input }: any, context: GraphQLContext) => {
+    await context.env.DB.prepare("UPDATE forms SET status = 'trash', updated_at = ? WHERE id = ?")
+      .bind(Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  restoreForm: async ({ input }: any, context: GraphQLContext) => {
+    await context.env.DB.prepare("UPDATE forms SET status = 'normal', updated_at = ? WHERE id = ?")
+      .bind(Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  updateFormArchive: async ({ input }: any, context: GraphQLContext) => {
+    const form = await context.env.DB.prepare('SELECT settings FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    const settings = parseJSON<any>(form?.settings, {})
+    settings.allowArchive = Boolean(input.allowArchive)
+    await context.env.DB.prepare('UPDATE forms SET settings = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(settings), Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  duplicateForm: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const form = await context.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    if (!form) throw new Error('Form not found')
+
+    const newId = generateId()
+    const now = Date.now()
+    await context.env.DB.prepare(
+      `INSERT INTO forms (
+        id, team_id, project_id, member_id, name, interactive_mode, kind,
+        fields, drafts, settings, theme_settings, logics, variables, hidden_fields, translations,
+        status, version, is_draft, can_publish, submission_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', 1, 1, 1, 0, ?, ?)`
+    )
+      .bind(
+        newId,
+        form.team_id,
+        form.project_id,
+        context.user.id,
+        input.name || `${form.name} (Copy)`,
+        form.interactive_mode,
+        form.kind,
+        form.fields,
+        form.drafts,
+        form.settings,
+        form.theme_settings,
+        form.logics,
+        form.variables,
+        form.hidden_fields,
+        form.translations,
+        now,
+        now
+      )
+      .run()
+
+    return newId
+  },
+
+  createFieldsWithAI: async ({ input }: any, context: GraphQLContext) => {
+    if (!context.user) throw new Error('Unauthorized')
+    const form = await context.env.DB.prepare('SELECT drafts FROM forms WHERE id = ?')
+      .bind(input.formId)
+      .first<FormRow>()
+    if (!form) return false
+    const drafts = parseJSON<any[]>(form.drafts, []) || []
+    drafts.push({
+      id: generateId(),
+      title: [input.prompt || 'Generated Question'],
+      kind: 'short_text',
+      validations: { required: false },
+      properties: {}
+    })
+    await context.env.DB.prepare('UPDATE forms SET drafts = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(drafts.map(normalizeField)), Date.now(), input.formId)
+      .run()
+    return true
+  },
+
+  createFormLogicsWithAI: async () => true,
+
+  createFormThemeWithAI: async () => true,
 
   updateFormTheme: async ({ input }: any, context: GraphQLContext) => {
     await context.env.DB.prepare('UPDATE forms SET theme_settings = ?, updated_at = ? WHERE id = ?')
@@ -1105,7 +1274,9 @@ export const rootResolver = {
       name: t.name,
       category: t.category,
       thumbnail: t.thumbnail,
-      description: t.description
+      description: t.description,
+      interactiveMode: toIntEnum(t.interactiveMode, 1),
+      kind: toIntEnum(t.kind, 1)
     }))
   },
 
@@ -1129,7 +1300,9 @@ export const rootResolver = {
       category: template.category,
       thumbnail: template.thumbnail,
       description: template.description,
-      fields: template.fields,
+      interactiveMode: toIntEnum(template.interactiveMode, 1),
+      kind: toIntEnum(template.kind, 1),
+      fields: (template.fields || []).map(normalizeField),
       themeSettings
     }
   },
