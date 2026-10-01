@@ -82,7 +82,7 @@ export const typeDefs = `
   }
 
   type FormSettings {
-    captchaKind: String
+    captchaKind: Int
     googleRecaptchaKey: String
     active: Boolean
     enableExpirationDate: Boolean
@@ -97,6 +97,7 @@ export const typeDefs = `
     requirePassword: Boolean
     redirectOnCompletion: Boolean
     redirectUrl: String
+    redirectDelay: Float
     enableQuotaLimit: Boolean
     quotaLimit: Int
     enableIpLimit: Boolean
@@ -114,6 +115,7 @@ export const typeDefs = `
     metaDescription: String
     metaOGImageUrl: String
     enableEmailNotification: Boolean
+    removeBranding: Boolean
   }
 
   type FormField {
@@ -717,6 +719,12 @@ export const typeDefs = `
     mime: String!
   }
 
+  input UploadFormFileInput {
+    formId: String!
+    filename: String!
+    mime: String!
+  }
+
   type Query {
     login(input: LoginInput!): Boolean!
     userDetail: UserDetail
@@ -794,6 +802,7 @@ export const typeDefs = `
     updateUser(input: UpdateUserInput!): Boolean!
     updateUserPassword(input: UpdateUserPasswordInput!): Boolean!
     completeSubmission(input: CompleteSubmissionInput!): CompleteSubmissionOutput!
+    uploadFileToken(input: UploadFormFileInput!): CdnToken!
     generateActivationCode: String!
     deleteActivationCode(code: String!): Boolean!
   }

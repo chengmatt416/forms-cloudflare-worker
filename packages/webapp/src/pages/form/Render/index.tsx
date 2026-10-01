@@ -29,7 +29,13 @@ export default function FormRender() {
   }, [form])
 
   async function fetchData() {
+    if (!formId) {
+      throw new Error('Form ID is missing')
+    }
     const result = await FormService.publicForm(formId)
+    if (!result || !result.id) {
+      throw new Error('Form not found or has been removed')
+    }
 
     setForm(result)
     setLocale(getFormLanguage(LANGUAGES, result.settings?.locale))
@@ -38,7 +44,20 @@ export default function FormRender() {
   }
 
   return (
-    <Async fetch={fetchData}>
+    <Async
+      fetch={fetchData}
+      loader={
+        <div className="flex h-screen w-screen items-center justify-center bg-white">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-slate-800" />
+        </div>
+      }
+      errorRender={err => (
+        <div className="flex h-screen w-screen flex-col items-center justify-center bg-white p-6 text-center">
+          <h2 className="text-xl font-semibold text-slate-800">無法載入表單</h2>
+          <p className="mt-2 text-sm text-slate-500">{err.message}</p>
+        </div>
+      )}
+    >
       {form && (
         <div id="heyform-render-root">
           <Renderer form={form} query={query} locale={locale!} />

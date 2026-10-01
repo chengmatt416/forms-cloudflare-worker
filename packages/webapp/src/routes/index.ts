@@ -231,6 +231,22 @@ const routes = [
       loginRequired: false,
       title: 'form.render.title'
     }
+  },
+  {
+    path: '/f/:formId',
+    component: FormRender,
+    options: {
+      loginRequired: false,
+      title: 'form.render.title'
+    }
+  },
+  {
+    path: '/:formId',
+    component: FormRender,
+    options: {
+      loginRequired: false,
+      title: 'form.render.title'
+    }
   }
 ]
 

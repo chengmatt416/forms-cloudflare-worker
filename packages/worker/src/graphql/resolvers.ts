@@ -1521,6 +1521,12 @@ export const rootResolver = {
     key: generateId()
   }),
 
+  uploadFileToken: async ({ input }: any) => ({
+    urlPrefix: '/api/file/',
+    token: 'token',
+    key: generateId()
+  }),
+
   // ---------------- ACTIVATION CODES ----------------
   activationCodes: async (_: any, context: GraphQLContext) => {
     if (!isUserAdmin(context.user)) {
