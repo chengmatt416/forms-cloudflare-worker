@@ -36,7 +36,7 @@ const ICON_CONFIGS = [...ALL_FIELD_CONFIGS, ...CUSTOM_FIELDS_CONFIGS]
 const AddressItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
   const { t } = useTranslation()
 
-  if (answer.kind !== field.kind || !helper.isObject(answer.value)) {
+  if (!helper.isObject(answer.value)) {
     return null
   }
 
@@ -78,7 +78,7 @@ const AddressItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) =>
           <dt className="border-accent-light text-secondary sm:border-accent-light col-start-1 border-t pt-3 first:border-none sm:border-t sm:py-3">
             {row.label}
           </dt>
-          <dd className="sm:[&amp;:nth-child(2)]:border-none text-primary sm:border-accent-light pb-3 pt-1 sm:border-t sm:py-3">
+          <dd className="sm:[&amp;:nth-child(2)]:border-none text-primary sm:border-accent-light pt-1 pb-3 sm:border-t sm:py-3">
             {row.value}
           </dd>
         </Fragment>
@@ -87,8 +87,8 @@ const AddressItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) =>
   )
 }
 
-const DateRangeItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
-  if (answer.kind !== field.kind || !helper.isObject(answer.value)) {
+const DateRangeItem: FC<SubmissionCellProps> = ({ answer, isTableCell }) => {
+  if (!helper.isObject(answer.value)) {
     return null
   }
 
@@ -103,14 +103,14 @@ const DateRangeItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) 
   )
 }
 
-const FileUploadItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
+const FileUploadItem: FC<SubmissionCellProps> = ({ answer, isTableCell }) => {
   const value = getFileUploadValue(
     answer.value,
     [...(window.heyform.uploadOrigins || []), window.location.origin],
     window.location.origin
   )
 
-  if (answer.kind !== field.kind || !value) {
+  if (!value) {
     return null
   }
 
@@ -137,8 +137,8 @@ const FileUploadItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell })
   )
 }
 
-const FullNameItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
-  if (answer.kind !== field.kind || !helper.isObject(answer.value)) {
+const FullNameItem: FC<SubmissionCellProps> = ({ answer, isTableCell }) => {
+  if (!helper.isObject(answer.value)) {
     return null
   }
 
@@ -156,11 +156,7 @@ const FullNameItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) =
 const InputTableItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
   const columns = field.properties?.tableColumns as Column[]
 
-  if (
-    answer.kind !== field.kind ||
-    !helper.isValidArray(columns) ||
-    !helper.isValidArray(answer.value)
-  ) {
+  if (!helper.isValidArray(columns) || !helper.isValidArray(answer.value)) {
     return null
   }
 
@@ -189,7 +185,7 @@ const InputTableItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell })
         <thead className="text-secondary">
           <tr className="border-accent border-b">
             {columns.map(c => (
-              <th key={c.id} className="text-nowrap py-2 text-left font-normal">
+              <th key={c.id} className="py-2 text-left font-normal text-nowrap">
                 {c.label}
               </th>
             ))}
@@ -202,7 +198,7 @@ const InputTableItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell })
               className="border-accent hover:bg-primary/[2.5%] border-b last:border-b-0"
             >
               {row.map((cell, index) => (
-                <td key={index} className="h-10 text-nowrap py-2 text-left">
+                <td key={index} className="h-10 py-2 text-left text-nowrap">
                   {cell}
                 </td>
               ))}
@@ -216,22 +212,35 @@ const InputTableItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell })
 
 const MultipleChoiceItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
   const choices = field.properties?.choices as Choice[]
+  let selectedValues: any[] = []
+  let otherValue: string | undefined = undefined
+
+  if (helper.isObject(answer.value)) {
+    if (helper.isValidArray(answer.value.value)) {
+      selectedValues = answer.value.value
+    }
+    if (helper.isValid(answer.value.other)) {
+      otherValue = answer.value.other
+    }
+  } else if (helper.isArray(answer.value)) {
+    selectedValues = answer.value
+  } else if (helper.isValid(answer.value)) {
+    selectedValues = [answer.value]
+  }
 
   if (
-    answer.kind !== field.kind ||
     !helper.isValidArray(choices) ||
-    !helper.isObject(answer.value) ||
-    (!helper.isValidArray(answer.value.value) && helper.isEmpty(answer.value.other))
+    (selectedValues.length === 0 && helper.isEmpty(otherValue))
   ) {
     return null
   }
 
-  const result = choices.filter(c => answer.value.value.includes(c.id))
+  const result = choices.filter(c => selectedValues.includes(c.id))
 
-  if (answer.value.other) {
+  if (otherValue) {
     result.push({
-      id: answer.value.other,
-      label: answer.value.other
+      id: otherValue,
+      label: otherValue
     })
   }
 
@@ -255,7 +264,7 @@ const MultipleChoiceItem: FC<SubmissionCellProps> = ({ answer, field, isTableCel
 const YesNoItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
   const choices = field.properties?.choices as Choice[]
 
-  if (answer.kind !== field.kind || !helper.isValidArray(choices)) {
+  if (!helper.isValidArray(choices)) {
     return null
   }
 
@@ -281,7 +290,7 @@ const YesNoItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
 }
 
 const OpinionScaleItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
-  if (answer.kind !== field.kind || !helper.isNumeric(answer.value)) {
+  if (!helper.isNumeric(answer.value)) {
     return null
   }
 
@@ -299,7 +308,7 @@ const OpinionScaleItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell 
 }
 
 const PaymentItem: FC<SubmissionCellProps> = ({ answer, field }) => {
-  if (answer.kind !== field.kind || !helper.isObject(answer.value)) {
+  if (!helper.isObject(answer.value)) {
     return null
   }
 
@@ -312,14 +321,14 @@ const PaymentItem: FC<SubmissionCellProps> = ({ answer, field }) => {
 
   return (
     <div className="flex items-center">
-      <div className="flex flex-1 items-center overflow-hidden truncate">
+      <div className="flex flex-1 items-center truncate overflow-hidden">
         {isCompleted ? (
-          <div className="flex h-6 items-center rounded bg-green-100 pl-1 pr-2 text-sm text-green-800">
+          <div className="flex h-6 items-center rounded bg-green-100 pr-2 pl-1 text-sm text-green-800">
             <IconCheck className="h-4 w-4" />
             <span className="ml-1">Succeeded</span>
           </div>
         ) : (
-          <div className="text-primary flex h-6 items-center rounded bg-gray-100 pl-1 pr-2 text-sm">
+          <div className="text-primary flex h-6 items-center rounded bg-gray-100 pr-2 pl-1 text-sm">
             <IconClock className="h-4 w-4" />
             <span className="ml-1">Incomplete</span>
           </div>
@@ -338,27 +347,48 @@ const PaymentItem: FC<SubmissionCellProps> = ({ answer, field }) => {
   )
 }
 
-const SignatureItem: FC<SubmissionCellProps> = ({ answer, field }) => {
-  if (answer.kind !== field.kind || !helper.isURL(answer.value)) {
+const SignatureItem: FC<SubmissionCellProps> = ({ answer }) => {
+  if (!answer?.value) {
+    return null
+  }
+  const isDataUrl = typeof answer.value === 'string' && answer.value.startsWith('data:image/')
+  const isHttpUrl = helper.isURL(answer.value)
+  if (!isDataUrl && !isHttpUrl) {
     return null
   }
 
-  return <Image src={answer.value} width={80} height={40} resize={{ width: 80, height: 40 }} />
+  return (
+    <img
+      src={answer.value}
+      alt="Signature"
+      className="h-10 w-20 rounded border border-gray-200 bg-white object-contain"
+    />
+  )
 }
 
-const TextItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
-  if (
-    answer.kind !== field.kind ||
-    !(helper.isString(answer.value) || helper.isNumber(answer.value))
-  ) {
+const TextItem: FC<SubmissionCellProps> = ({ answer, isTableCell }) => {
+  if (helper.isNil(answer?.value) || answer.value === '') {
     return null
   }
 
-  return <div className={cn(isTableCell ? 'truncate' : 'whitespace-pre-line')}>{answer.value}</div>
+  let displayValue: any = answer.value
+  if (typeof displayValue === 'object') {
+    if (helper.isValid(displayValue.value)) {
+      displayValue = displayValue.value
+    } else {
+      displayValue = JSON.stringify(displayValue)
+    }
+  }
+
+  return (
+    <div className={cn(isTableCell ? 'truncate' : 'whitespace-pre-line')}>
+      {String(displayValue)}
+    </div>
+  )
 }
 
-const URLItem: FC<SubmissionCellProps> = ({ answer, field, isTableCell }) => {
-  if (answer.kind !== field.kind || !helper.isString(answer.value)) {
+const URLItem: FC<SubmissionCellProps> = ({ answer, isTableCell }) => {
+  if (!helper.isString(answer.value)) {
     return null
   }
 
@@ -387,7 +417,15 @@ const CheckboxItem: FC<SubmissionCellProps> = ({ submission }) => {
   )
 }
 
-export default function SubmissionCell(props: SubmissionCellProps) {
+export default function SubmissionCell(rawProps: SubmissionCellProps) {
+  const props = {
+    ...rawProps,
+    answer: {
+      ...rawProps.answer,
+      kind: rawProps.field?.kind || rawProps.answer?.kind
+    }
+  }
+
   switch (props.field.kind) {
     case FieldKindEnum.HIDDEN_CHECKBOX:
       return <CheckboxItem {...props} />

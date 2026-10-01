@@ -32,7 +32,7 @@ const SubmissionItem: FC<SubmissionItemProps> = ({ submission, field }) => {
   return (
     <div className="space-y-3 pt-4 text-sm/6">
       <SubmissionHeaderCell
-        className="text-secondary items-start gap-x-2 [&_[data-slot=icon]]:h-5 [&_[data-slot=icon]]:w-5 [&_[data-slot=label]]:text-wrap [&_[data-slot=label]]:text-base/6 [&_[data-slot=label]]:font-medium [&_[data-slot=question-icon]]:h-6 [&_[data-slot=question-icon]]:w-6"
+        className="text-secondary items-start gap-x-2 [&_[data-slot=icon]]:h-5 [&_[data-slot=icon]]:w-5 [&_[data-slot=label]]:text-base/6 [&_[data-slot=label]]:font-medium [&_[data-slot=label]]:text-wrap [&_[data-slot=question-icon]]:h-6 [&_[data-slot=question-icon]]:w-6"
         field={field}
       />
       <div className="min-w-0 flex-1">
@@ -46,10 +46,23 @@ const SubmissionDetail: FC<SubmissionDetailProps> = () => {
   const { t, i18n } = useTranslation()
   const { payload } = useModal<SubmissionDetailPayload>('SubmissionDetailModal')
 
-  const fields = useMemo(
-    () => (payload?.fields || []).filter(f => f.kind !== FieldKindEnum.SUBMIT_DATE),
-    [payload?.fields]
-  )
+  const fields = useMemo(() => {
+    const list = [...(payload?.fields || [])].filter(f => f.kind !== FieldKindEnum.SUBMIT_DATE)
+    const existingIds = new Set(list.map(f => f.id))
+    if (payload?.submission?.answers) {
+      for (const ans of payload.submission.answers) {
+        if (ans.id && !existingIds.has(ans.id) && ans.id !== FieldKindEnum.SUBMIT_DATE) {
+          list.push({
+            id: ans.id,
+            kind: ans.kind || FieldKindEnum.SHORT_TEXT,
+            title: (ans as any).title || ans.id
+          } as FormField)
+          existingIds.add(ans.id)
+        }
+      }
+    }
+    return list
+  }, [payload?.fields, payload?.submission?.answers])
 
   const submitDate = useMemo(() => {
     if (payload?.fields && payload?.submission) {
@@ -67,7 +80,7 @@ const SubmissionDetail: FC<SubmissionDetailProps> = () => {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-end px-6 pb-2 pt-6">
+      <div className="flex items-end px-6 pt-6 pb-2">
         <div className="flex-1">
           <h1 className="text-primary text-2xl/8 font-semibold sm:text-xl/8">
             {t('form.submissions.detail.headline')}

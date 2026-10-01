@@ -584,4 +584,148 @@ test.describe('Live Production E2E Full User Journey', () => {
     await expect(checkTypeLabel).toBeVisible({ timeout: 5000 })
     await expect(page.locator('text=Custom Error Message')).toBeVisible()
   })
+
+  test('14. Multi-Question Complete Form Submission & All Answers Recorded in Inbox & Detail Modal', async ({
+    page,
+    browser
+  }) => {
+    // 14a. Login as admin and create a 4-question form (Short Text, Email, Multiple Choice, Rating)
+    const loginRes = await gql(`query Login($input: LoginInput!) { login(input: $input) }`, {
+      input: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
+    })
+    const adminCookie = loginRes.setCookie
+
+    const createRes = await gql(
+      `mutation CreateForm($input: CreateFormInput!) { createForm(input: $input) }`,
+      {
+        input: {
+          projectId: 'ee8ee3fd02a64596',
+          name: `Multi-Question Test ${Date.now()}`
+        }
+      },
+      adminCookie
+    )
+    const newFormId = createRes.json?.data?.createForm
+    expect(newFormId).toBeTruthy()
+
+    const drafts = [
+      {
+        id: 'q1_name',
+        kind: 'short_text',
+        title: 'Your Full Name'
+      },
+      {
+        id: 'q2_email',
+        kind: 'email',
+        title: 'Your Work Email'
+      },
+      {
+        id: 'q3_choice',
+        kind: 'multiple_choice',
+        title: 'Preferred Framework',
+        properties: {
+          choices: [
+            { id: 'opt_react', label: 'React' },
+            { id: 'opt_vue', label: 'Vue' }
+          ]
+        }
+      },
+      {
+        id: 'q4_rating',
+        kind: 'rating',
+        title: 'Satisfaction Score',
+        properties: {
+          total: 5
+        }
+      }
+    ]
+
+    await gql(
+      `mutation PublishForm($input: UpdateFormSchemasInput!) { publishForm(input: $input) }`,
+      {
+        input: {
+          formId: newFormId,
+          drafts
+        }
+      },
+      adminCookie
+    )
+
+    // 14b. Answering form sequentially in a clean public browser context
+    const uniqueName = `Alice Developer ${Date.now()}`
+    const uniqueEmail = `alice_${Date.now()}@example.com`
+
+    const respondentContext = await browser.newContext()
+    const respondentPage = await respondentContext.newPage()
+    await respondentPage.goto(`${BASE_URL}/form/${newFormId}`)
+    await respondentPage.waitForLoadState('networkidle')
+
+    // Question 1: Short text
+    const nameInput = respondentPage.locator('input[placeholder="Your answer goes here"]')
+    await expect(nameInput).toBeVisible({ timeout: 15000 })
+    await nameInput.fill(uniqueName)
+    // Click Next button (intermediate questions must render Next, not Submit!)
+    const nextBtn1 = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn1).toBeVisible({ timeout: 5000 })
+    await nextBtn1.click()
+    await respondentPage.waitForTimeout(1100)
+
+    // Question 2: Email
+    const emailInput = respondentPage.locator('input[type="email"]')
+    await expect(emailInput).toBeVisible({ timeout: 15000 })
+    await emailInput.fill(uniqueEmail)
+    const nextBtn2 = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn2).toBeVisible({ timeout: 5000 })
+    await nextBtn2.click()
+    await respondentPage.waitForTimeout(1100)
+
+    // Question 3: Multiple choice (click choice and then Next button)
+    const choiceOpt = respondentPage.locator('text=React').first()
+    await expect(choiceOpt).toBeVisible({ timeout: 15000 })
+    await choiceOpt.click()
+    const nextBtn3 = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn3).toBeVisible({ timeout: 5000 })
+    await nextBtn3.click()
+    await respondentPage.waitForTimeout(1100)
+
+    // Question 4: Rating (last question, click star rating and click Submit)
+    const ratingStar = respondentPage.locator('.rate-item').last()
+    await expect(ratingStar).toBeVisible({ timeout: 15000 })
+    await ratingStar.click()
+
+    const submitBtn = respondentPage.locator('.heyform-body-active button:has-text("Submit")')
+    await expect(submitBtn).toBeVisible({ timeout: 5000 })
+    await submitBtn.click()
+
+    // Verify Thank You ending screen renders
+    await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
+    await respondentContext.close()
+
+    // 14c. Admin verifies that ALL 4 questions are recorded in the submissions table
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${newFormId}/submissions`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify all 4 answers appear in the inbox row
+    await expect(page.locator(`text=${uniqueName}`)).toBeVisible({ timeout: 15000 })
+    await expect(page.locator(`text=${uniqueEmail}`)).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('text=React').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('text=5/5').first()).toBeVisible({ timeout: 15000 })
+
+    // 14d. Open submission detail modal and verify all questions are recorded
+    await page.locator(`text=${uniqueName}`).first().click()
+    await expect(
+      page.locator('text=Submission details').or(page.locator('h1')).first()
+    ).toBeVisible({ timeout: 10000 })
+    await expect(page.locator(`text=${uniqueName}`).first()).toBeVisible()
+    await expect(page.locator(`text=${uniqueEmail}`).first()).toBeVisible()
+    await expect(page.locator('text=React').first()).toBeVisible()
+  })
 })

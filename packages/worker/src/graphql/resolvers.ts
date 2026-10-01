@@ -55,6 +55,23 @@ function toUnix(val?: number | null): number {
   return val > 1e11 ? Math.floor(val / 1000) : Math.floor(val)
 }
 
+function extractFieldMap(items: any[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  const walk = (list: any[]) => {
+    if (!Array.isArray(list)) return
+    for (const item of list) {
+      if (item?.id) {
+        map[item.id] = item.kind || 'short_text'
+      }
+      if (item?.properties?.fields) {
+        walk(item.properties.fields)
+      }
+    }
+  }
+  walk(items)
+  return map
+}
+
 function formatFormListItem(f: FormRow) {
   return {
     id: f.id,
@@ -1651,10 +1668,7 @@ export const rootResolver = {
       ...(parseJSON<any[]>(f?.fields, []) || []),
       ...(parseJSON<any[]>(f?.drafts, []) || [])
     ]
-    const kindMap: Record<string, string> = {}
-    for (const fld of formFields) {
-      if (fld?.id) kindMap[fld.id] = fld.kind || 'short_text'
-    }
+    const kindMap = extractFieldMap(formFields)
 
     const mapSubmission = (s: SubmissionRow) => {
       const rawAnswers = parseJSON<Record<string, any>>(s.answers, {})
@@ -1663,11 +1677,18 @@ export const rootResolver = {
         answersArr = rawAnswers
       } else if (rawAnswers && typeof rawAnswers === 'object') {
         answersArr = Object.entries(rawAnswers).map(([key, val]) => {
-          const v =
-            typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val
+          const isAnswerWrapper =
+            typeof val === 'object' &&
+            val !== null &&
+            'id' in val &&
+            'kind' in val &&
+            'value' in val
+
+          const v = isAnswerWrapper ? (val as any).value : val
+          const k = (isAnswerWrapper ? (val as any).kind : null) || kindMap[key] || 'short_text'
           return {
             id: key,
-            kind: kindMap[key] || 'short_text',
+            kind: k,
             value: v
           }
         })
@@ -1724,10 +1745,7 @@ export const rootResolver = {
       ...(parseJSON<any[]>(f?.fields, []) || []),
       ...(parseJSON<any[]>(f?.drafts, []) || [])
     ]
-    const kindMap: Record<string, string> = {}
-    for (const fld of formFields) {
-      if (fld?.id) kindMap[fld.id] = fld.kind || 'short_text'
-    }
+    const kindMap = extractFieldMap(formFields)
 
     const rawAnswers = parseJSON<Record<string, any>>(s.answers, {})
     let answersArr: any[] = []
@@ -1735,11 +1753,14 @@ export const rootResolver = {
       answersArr = rawAnswers
     } else if (rawAnswers && typeof rawAnswers === 'object') {
       answersArr = Object.entries(rawAnswers).map(([key, val]) => {
-        const v =
-          typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val
+        const isAnswerWrapper =
+          typeof val === 'object' && val !== null && 'id' in val && 'kind' in val && 'value' in val
+
+        const v = isAnswerWrapper ? (val as any).value : val
+        const k = (isAnswerWrapper ? (val as any).kind : null) || kindMap[key] || 'short_text'
         return {
           id: key,
-          kind: kindMap[key] || 'short_text',
+          kind: k,
           value: v
         }
       })

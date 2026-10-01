@@ -112,7 +112,12 @@ export default function FormSubmissions() {
       title: t('form.builder.question.submitDate')
     }
 
-    const questionFields = flattenFields(form?.drafts || []).filter(row =>
+    const allFormFields = [
+      ...(form?.fields || []),
+      ...(form?.drafts || []).filter(d => !form?.fields?.some(f => f.id === d.id))
+    ]
+
+    const questionFields = flattenFields(allFormFields).filter(row =>
       QUESTION_FIELD_KINDS.includes(row.kind)
     )
 
@@ -129,7 +134,7 @@ export default function FormSubmissions() {
     }))
 
     return [submitDateField, ...questionFields, ...variables, ...hiddenFields] as FormField[]
-  }, [form?.drafts, form?.hiddenFields, form?.variables, t])
+  }, [form?.fields, form?.drafts, form?.hiddenFields, form?.variables, t])
 
   async function fetch({ current, pageSize }: TableFetchParams) {
     const { total, submissions } = await SubmissionService.submissions({

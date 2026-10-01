@@ -188,7 +188,7 @@ const actions: any = {
     const questionCount = fields.filter(f => QUESTION_FIELD_KINDS.includes(f.kind)).length
     const percentage = progressPercentage(Object.keys(newValues).length, questionCount)
 
-    const isTouched = validateLogicField(fields[state.scrollIndex!], state.jumpFieldIds, values)
+    const isTouched = validateLogicField(fields[state.scrollIndex!], state.jumpFieldIds, newValues)
     const isScrollNextDisabled = !isTouched || state.scrollIndex! >= fields.length - 1
 
     return {

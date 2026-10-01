@@ -102,8 +102,8 @@ export const Form: FC<FormProps> = ({
     }
 
     const isTouched = validateLogicField(field, state.jumpFieldIds, values)
-    const isPartialSubmission = state.isScrollNextDisabled && !isTouched
-    const isSubmitting = isLastBlock || state.isScrollNextDisabled
+    const isPartialSubmission = false
+    const isSubmitting = isLastBlock
 
     if (isSubmitting) {
       if (loading) {
@@ -297,24 +297,18 @@ export const Form: FC<FormProps> = ({
   function handleValuesChange(changes: any, values: any) {
     restProps.onValuesChange?.(changes, values)
 
-    if (autoSubmit) {
-      if (isLastBlock) {
-        const value = getValues ? getValues(changes) : changes
-
-        if (helper.isValid(value)) {
-          dispatch({
-            type: 'setValues',
-            payload: {
-              values: {
-                [field.id]: value
-              }
-            }
-          })
+    const rawVal = getValues ? getValues(values) : values
+    dispatch({
+      type: 'setValues',
+      payload: {
+        values: {
+          [field.id]: helper.isValid(rawVal) ? rawVal : undefined
         }
-      } else {
-        setTimeout(() => form.submit(), 500)
       }
+    })
 
+    if (autoSubmit) {
+      setTimeout(() => form.submit(), 500)
       return
     }
 
@@ -353,6 +347,25 @@ export const Form: FC<FormProps> = ({
     }
   }, [state.errorFieldId])
 
+  useEffect(() => {
+    return () => {
+      try {
+        const rawValues = form.getFieldsValue()
+        const val = getValues ? getValues(rawValues) : rawValues
+        if (helper.isValid(val)) {
+          dispatch({
+            type: 'setValues',
+            payload: {
+              values: {
+                [field.id]: val
+              }
+            }
+          })
+        }
+      } catch {}
+    }
+  }, [field.id])
+
   return (
     <RCForm
       className={clsx('heyform-form', {
@@ -368,7 +381,7 @@ export const Form: FC<FormProps> = ({
       {children}
 
       {/* Submit */}
-      {isLastBlock || state.isScrollNextDisabled ? (
+      {isLastBlock ? (
         <>
           {submitError && (
             <div className="heyform-validation-wrapper">
