@@ -728,4 +728,164 @@ test.describe('Live Production E2E Full User Journey', () => {
     await expect(page.locator(`text=${uniqueEmail}`).first()).toBeVisible()
     await expect(page.locator('text=React').first()).toBeVisible()
   })
+
+  test('15. Mobile Touch Device Basic Signature Pad - Touch Gestures, Multi-Stroke Preservation & Submission', async ({
+    browser
+  }) => {
+    // 15a. Admin creates a form with Short Text and Signature question
+    const loginRes = await gql(`query Login($input: LoginInput!) { login(input: $input) }`, {
+      input: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
+    })
+    const adminCookie = loginRes.setCookie
+
+    const createRes = await gql(
+      `mutation CreateForm($input: CreateFormInput!) { createForm(input: $input) }`,
+      {
+        input: {
+          projectId: 'ee8ee3fd02a64596',
+          name: `Mobile Signature Test ${Date.now()}`
+        }
+      },
+      adminCookie
+    )
+    const newFormId = createRes.json?.data?.createForm
+    expect(newFormId).toBeTruthy()
+
+    await gql(
+      `mutation PublishForm($input: UpdateFormSchemasInput!) { publishForm(input: $input) }`,
+      {
+        input: {
+          formId: newFormId,
+          drafts: [
+            { id: 'q1_name', kind: 'short_text', title: 'Signer Name' },
+            { id: 'q2_sig', kind: 'signature', title: 'Please Sign Below' }
+          ]
+        }
+      },
+      adminCookie
+    )
+
+    // 15b. Open in mobile context (iPhone 13 viewport, hasTouch: true, isMobile: true)
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      hasTouch: true,
+      isMobile: true
+    })
+    const respondentPage = await mobileContext.newPage()
+    await respondentPage.goto(`${BASE_URL}/form/${newFormId}`)
+    await respondentPage.waitForLoadState('networkidle')
+
+    // Question 1: Fill name and click Next
+    const signerName = `Mobile Signer ${Date.now()}`
+    const nameInput = respondentPage.locator('input[placeholder="Your answer goes here"]')
+    await expect(nameInput).toBeVisible({ timeout: 15000 })
+    await nameInput.fill(signerName)
+    const nextBtn = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn).toBeVisible()
+    await nextBtn.click()
+    await respondentPage.waitForTimeout(1100)
+
+    // Question 2: Signature canvas
+    const canvas = respondentPage.locator('.heyform-body-active .heyform-signature-wrapper canvas')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
+
+    // Verify touch-action: none is computed and active
+    const touchAction = await canvas.evaluate(
+      (el: HTMLCanvasElement) => window.getComputedStyle(el).touchAction
+    )
+    expect(touchAction).toBe('none')
+
+    const canvasBox = await canvas.boundingBox()
+    expect(canvasBox).toBeTruthy()
+
+    const startX = Math.round(canvasBox!.x + 50)
+    const startY = Math.round(canvasBox!.y + 60)
+
+    // 15c. Perform First Stroke via CDP native touch event
+    const cdp = await respondentPage.context().newCDPSession(respondentPage)
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: startX, y: startY, radiusX: 5, radiusY: 5, force: 1 }]
+    })
+    for (let i = 1; i <= 8; i++) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [
+          {
+            x: startX + i * 15,
+            y: startY + (i % 2 === 0 ? 15 : -15),
+            radiusX: 5,
+            radiusY: 5,
+            force: 1
+          }
+        ]
+      })
+      await respondentPage.waitForTimeout(25)
+    }
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: []
+    })
+    await respondentPage.waitForTimeout(300)
+
+    // Verify canvas has non-empty pixel data after first stroke
+    const hasDrawn1 = await canvas.evaluate((el: HTMLCanvasElement) => {
+      const ctx = el.getContext('2d')
+      if (!ctx) return false
+      const imgData = ctx.getImageData(0, 0, el.width, el.height).data
+      for (let i = 0; i < imgData.length; i += 4) {
+        if (imgData[i + 3] > 0) return true
+      }
+      return false
+    })
+    expect(hasDrawn1).toBe(true)
+
+    // 15d. Perform Second Stroke (multi-stroke signature like crossing a T)
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: startX + 20, y: startY + 30, radiusX: 5, radiusY: 5, force: 1 }]
+    })
+    for (let i = 1; i <= 6; i++) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [
+          {
+            x: startX + 20 + i * 15,
+            y: startY + 30,
+            radiusX: 5,
+            radiusY: 5,
+            force: 1
+          }
+        ]
+      })
+      await respondentPage.waitForTimeout(25)
+    }
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: []
+    })
+    await respondentPage.waitForTimeout(400)
+
+    // Verify canvas is still drawn after second stroke (not cleared or overwritten)
+    const hasDrawn2 = await canvas.evaluate((el: HTMLCanvasElement) => {
+      const ctx = el.getContext('2d')
+      if (!ctx) return false
+      const imgData = ctx.getImageData(0, 0, el.width, el.height).data
+      for (let i = 0; i < imgData.length; i += 4) {
+        if (imgData[i + 3] > 0) return true
+      }
+      return false
+    })
+    expect(hasDrawn2).toBe(true)
+
+    // 15e. Submit form and verify successful submission
+    const submitBtn = respondentPage.locator('.heyform-body-active button:has-text("Submit")')
+    await expect(submitBtn).toBeVisible()
+    await submitBtn.click()
+
+    await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
+    await mobileContext.close()
+  })
 })

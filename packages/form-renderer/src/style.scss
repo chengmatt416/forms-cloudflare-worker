@@ -1251,12 +1251,20 @@ button.button-icon-only {
 // -----------------------------------------------------------------------------
 // Signature
 .heyform-signature-wrapper {
+  touch-action: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   border: 1px dashed var(--heyform-answer-color);
   background-color: var(--heyform-answer-opacity-10-color);
 
   &,
   canvas {
-    @apply h-40 w-full rounded;
+    touch-action: none !important;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    @apply h-44 w-full rounded sm:h-48;
   }
 }
 

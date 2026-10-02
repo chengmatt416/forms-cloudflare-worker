@@ -42,50 +42,156 @@ export const SignaturePad: FC<SignaturePadProps> = ({ value, penColor = '#1e293b
   const [syncSuccess, setSyncSuccess] = useState(false)
   const pollTimerRef = useRef<any>(null)
 
+  const lastExportedValueRef = useRef<string | undefined>(value)
+  const isInternalDrawingRef = useRef(false)
+
   const signaturePad = useMemo(() => {
-    if (canvasRef) {
-      return new Signature_pad(canvasRef, { penColor })
-    }
+    if (!canvasRef) return null
+    return new Signature_pad(canvasRef, {
+      penColor,
+      minWidth: 1.5,
+      maxWidth: 3.5,
+      throttle: 0
+    })
   }, [canvasRef, penColor])
 
   const handleClear = useCallback(() => {
     signaturePad?.clear()
+    lastExportedValueRef.current = ''
     onChange?.('')
   }, [signaturePad, onChange])
 
+  const handleBeginStroke = useCallback(() => {
+    isInternalDrawingRef.current = true
+  }, [])
+
   const handleEndStroke = useCallback(() => {
     if (signaturePad && !signaturePad.isEmpty()) {
-      onChange?.(signaturePad.toDataURL('image/png'))
+      const dataUrl = signaturePad.toDataURL('image/png')
+      lastExportedValueRef.current = dataUrl
+      onChange?.(dataUrl)
     }
+    setTimeout(() => {
+      isInternalDrawingRef.current = false
+    }, 150)
   }, [signaturePad, onChange])
 
-  // Setup canvas resolution scaling for high-DPI screens
+  // Register stroke event listeners on signaturePad
   useEffect(() => {
-    if (canvasRef) {
-      const ratio = Math.max(window.devicePixelRatio || 1, 1)
-      canvasRef.width = canvasRef.offsetWidth * ratio
-      canvasRef.height = canvasRef.offsetHeight * ratio
-      canvasRef.getContext('2d')?.scale(ratio, ratio)
+    if (!signaturePad) return
+    signaturePad.addEventListener('beginStroke', handleBeginStroke)
+    signaturePad.addEventListener('endStroke', handleEndStroke)
+    return () => {
+      signaturePad.removeEventListener('beginStroke', handleBeginStroke)
+      signaturePad.removeEventListener('endStroke', handleEndStroke)
     }
-  }, [canvasRef])
+  }, [signaturePad, handleBeginStroke, handleEndStroke])
 
-  // Initial and value change sync with Signature_pad
+  // Synchronize external value changes without interrupting user drawing
   useEffect(() => {
-    if (signaturePad) {
-      signaturePad.clear()
+    if (!signaturePad) return
 
-      if (helper.isValid(value)) {
-        signaturePad.fromDataURL(value!)
+    // If currently drawing or if incoming value matches what we exported, do NOT clear/redraw!
+    if (isInternalDrawingRef.current || value === lastExportedValueRef.current) {
+      return
+    }
+
+    lastExportedValueRef.current = value
+
+    if (helper.isValid(value) && value !== '') {
+      signaturePad.fromDataURL(value!)
+    } else {
+      signaturePad.clear()
+    }
+  }, [signaturePad, value])
+
+  // High-DPI canvas resizing and orientation/layout adjustment
+  const resizeCanvas = useCallback(() => {
+    if (!canvasRef) return
+    const ratio = Math.max(window.devicePixelRatio || 1, 1)
+    const rect = canvasRef.getBoundingClientRect()
+    const width = Math.round(rect.width || canvasRef.offsetWidth)
+    const height = Math.round(rect.height || canvasRef.offsetHeight)
+
+    if (width === 0 || height === 0) return
+
+    const targetWidth = Math.round(width * ratio)
+    const targetHeight = Math.round(height * ratio)
+
+    if (canvasRef.width !== targetWidth || canvasRef.height !== targetHeight) {
+      // Save existing strokes if present
+      const data = signaturePad && !signaturePad.isEmpty() ? signaturePad.toData() : null
+
+      canvasRef.width = targetWidth
+      canvasRef.height = targetHeight
+      const ctx = canvasRef.getContext('2d')
+      if (ctx) {
+        ctx.scale(ratio, ratio)
       }
 
-      signaturePad.addEventListener('endStroke', handleEndStroke)
+      if (data && signaturePad) {
+        signaturePad.fromData(data)
+      } else if (value && signaturePad) {
+        signaturePad.fromDataURL(value)
+      } else {
+        signaturePad?.clear()
+      }
+    }
+  }, [canvasRef, signaturePad, value])
+
+  // Attach ResizeObserver and resize listeners
+  useEffect(() => {
+    if (!canvasRef) return
+
+    resizeCanvas()
+    const rafId = requestAnimationFrame(resizeCanvas)
+    const timerId1 = setTimeout(resizeCanvas, 150)
+    const timerId2 = setTimeout(resizeCanvas, 400) // Settle after question entrance transition
+
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        resizeCanvas()
+      })
+      if (canvasRef.parentElement) {
+        observer.observe(canvasRef.parentElement)
+      }
+      observer.observe(canvasRef)
     }
 
+    window.addEventListener('resize', resizeCanvas)
+    window.addEventListener('orientationchange', resizeCanvas)
+
     return () => {
-      signaturePad?.removeEventListener('endStroke', handleEndStroke)
-      signaturePad?.off()
+      cancelAnimationFrame(rafId)
+      clearTimeout(timerId1)
+      clearTimeout(timerId2)
+      observer?.disconnect()
+      window.removeEventListener('resize', resizeCanvas)
+      window.removeEventListener('orientationchange', resizeCanvas)
     }
-  }, [signaturePad, value, handleEndStroke])
+  }, [canvasRef, resizeCanvas])
+
+  // Prevent mobile gesture conflicts (scrolling, pinch, pull-to-refresh) on canvas
+  useEffect(() => {
+    const canvas = canvasRef
+    if (!canvas) return
+
+    const handleTouch = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault()
+      }
+      e.stopPropagation()
+    }
+
+    canvas.addEventListener('touchstart', handleTouch, { passive: false })
+    canvas.addEventListener('touchmove', handleTouch, { passive: false })
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouch)
+      canvas.removeEventListener('touchmove', handleTouch)
+    }
+  }, [canvasRef])
 
   // ──────────────────────────────────────────────────────────
   // Trackpad Mode: Dedicated high-precision drawing canvas
@@ -379,8 +485,12 @@ export const SignaturePad: FC<SignaturePadProps> = ({ value, penColor = '#1e293b
   return (
     <div className="heyform-signature-pad relative w-full">
       {/* Canvas Wrapper */}
-      <div className="heyform-signature-wrapper relative overflow-hidden rounded-lg">
-        <canvas ref={setCanvasRef} className="block w-full cursor-crosshair" />
+      <div className="heyform-signature-wrapper relative touch-none overflow-hidden rounded-lg select-none">
+        <canvas
+          ref={setCanvasRef}
+          className="block h-44 w-full cursor-crosshair touch-none select-none sm:h-48"
+          style={{ touchAction: 'none' }}
+        />
       </div>
 
       {/* Trackpad Mode Direct Signing Overlay */}
@@ -471,10 +581,10 @@ export const SignaturePad: FC<SignaturePadProps> = ({ value, penColor = '#1e293b
         <span className="text-secondary text-xs">{t('Draw your signature above')}</span>
 
         <div className="flex items-center gap-1.5">
-          {/* Trackpad Mode Button */}
+          {/* Trackpad Mode Button - Desktop/laptop only */}
           <button
             type="button"
-            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all"
+            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary hidden items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all sm:inline-flex"
             onClick={handleStartTrackpad}
             title={t(
               'Trackpad Mode - Full surface direct finger writing with pressure sensitivity'
@@ -484,10 +594,10 @@ export const SignaturePad: FC<SignaturePadProps> = ({ value, penColor = '#1e293b
             <span>{t('Trackpad Mode')}</span>
           </button>
 
-          {/* Sign on Phone QR Code Button */}
+          {/* Sign on Phone QR Code Button - Desktop only */}
           <button
             type="button"
-            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all"
+            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary hidden items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all sm:inline-flex"
             onClick={handleOpenQrModal}
             title={t('Scan with phone camera to sign on touch screen')}
           >
@@ -496,13 +606,14 @@ export const SignaturePad: FC<SignaturePadProps> = ({ value, penColor = '#1e293b
           </button>
 
           {/* Clear Button */}
-          <Button.Link
-            className="text-secondary hover:text-error ml-1 px-1.5 text-xs"
+          <button
+            type="button"
+            className="border-accent-light bg-foreground/60 text-secondary hover:text-error hover:bg-accent-light inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium shadow-sm transition-all"
             onClick={handleClear}
           >
-            <IconEraser className="mr-0.5 inline h-3.5 w-3.5" />
-            {t('Clear')}
-          </Button.Link>
+            <IconEraser className="h-3.5 w-3.5" />
+            <span>{t('Clear')}</span>
+          </button>
         </div>
       </div>
 
