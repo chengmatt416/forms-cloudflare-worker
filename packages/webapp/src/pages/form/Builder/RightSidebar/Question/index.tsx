@@ -12,6 +12,7 @@ import PaymentSettings from './Payment'
 import PhoneNumberSettings from './PhoneNumber'
 import RatingSettings from './Rating'
 import RequiredSettings, { RequiredSettingsProps } from './Required'
+import SignatureSettings from './Signature'
 import StatementSettings from './Statement'
 import ThankYouSettings from './ThankYou'
 import TypeSwitcher from './TypeSwitcher'
@@ -46,6 +47,9 @@ const Settings = ({ field }: RequiredSettingsProps) => {
 
       case FieldKindEnum.PAYMENT:
         return <PaymentSettings field={field} />
+
+      case FieldKindEnum.SIGNATURE:
+        return <SignatureSettings field={field} />
 
       default:
         return null

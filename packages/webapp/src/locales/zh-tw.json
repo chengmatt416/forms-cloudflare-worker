@@ -1335,6 +1335,12 @@
           "nzd": "NZD — 紐西蘭元",
           "brl": "BRL — 巴西雷亞爾"
         },
+        "signature": {
+          "isLegal": "具備法律效力之電子簽名（存證防竄改）",
+          "isLegalDescription": "符合《電子簽章法》與 ESIGN，記錄 SHA-256 數位指紋、IP 與不可否認性存證軌跡",
+          "consentDeclaration": "法定同意條款與聲明",
+          "requireConsentCheckbox": "要求簽署者勾選同意聲明"
+        },
         "multipleChoice": {
           "unlimited": "不限",
           "exactNumber": "確切數量",

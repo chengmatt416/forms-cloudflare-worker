@@ -47,10 +47,21 @@ app.post('/graphql', async c => {
   }
 
   const setCookies: string[] = []
+  const clientIp =
+    c.req.header('cf-connecting-ip') ||
+    c.req.header('x-forwarded-for')?.split(',')[0].trim() ||
+    c.req.header('x-real-ip') ||
+    '127.0.0.1'
+  const userAgent = c.req.header('user-agent') || 'Unknown'
+  const country = (c.req.raw as any)?.cf?.country || c.req.header('cf-ipcountry') || 'Unknown'
+
   const context: GraphQLContext = {
     env: c.env,
     user: currentUser,
-    setCookies
+    setCookies,
+    clientIp,
+    userAgent,
+    country
   }
 
   const body = await c.req.json<{ query: string; variables?: any; operationName?: string }>()

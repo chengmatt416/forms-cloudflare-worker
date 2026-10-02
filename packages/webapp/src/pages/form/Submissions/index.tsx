@@ -39,6 +39,7 @@ import {
 import { useAppStore, useFormStore } from '@/store'
 import { SubmissionType } from '@/types'
 
+import { SignatureAuditModal } from './SignatureAuditModal'
 import SubmissionCell, { SubmissionHeaderCell } from './SubmissionCell'
 import SubmissionDetailModal from './SubmissionDetailModal'
 
@@ -112,10 +113,9 @@ export default function FormSubmissions() {
       title: t('form.builder.question.submitDate')
     }
 
-    const allFormFields = [
-      ...(form?.fields || []),
-      ...(form?.drafts || []).filter(d => !form?.fields?.some(f => f.id === d.id))
-    ]
+    const fFields: FormField[] = (form as any)?.fields || []
+    const fDrafts: FormField[] = (form as any)?.drafts || []
+    const allFormFields = [...fFields, ...fDrafts.filter(d => !fFields.some(f => f.id === d.id))]
 
     const questionFields = flattenFields(allFormFields).filter(row =>
       QUESTION_FIELD_KINDS.includes(row.kind)
@@ -134,7 +134,7 @@ export default function FormSubmissions() {
     }))
 
     return [submitDateField, ...questionFields, ...variables, ...hiddenFields] as FormField[]
-  }, [form?.fields, form?.drafts, form?.hiddenFields, form?.variables, t])
+  }, [(form as any)?.fields, (form as any)?.drafts, form?.hiddenFields, form?.variables, t])
 
   async function fetch({ current, pageSize }: TableFetchParams) {
     const { total, submissions } = await SubmissionService.submissions({
@@ -355,6 +355,7 @@ export default function FormSubmissions() {
       </div>
 
       <SubmissionDetailModal onClose={handleClose} />
+      <SignatureAuditModal />
     </>
   )
 }

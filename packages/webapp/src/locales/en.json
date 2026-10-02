@@ -1406,6 +1406,12 @@
           "nzd": "NZD — New Zealand dollar",
           "brl": "BRL — Brazilian real"
         },
+        "signature": {
+          "isLegal": "Legal E-Signature & Audit Trail",
+          "isLegalDescription": "Collect legally binding electronic signatures with cryptographic SHA-256 fingerprinting, IP & timestamp audit trail.",
+          "consentDeclaration": "Legal Consent Declaration",
+          "requireConsentCheckbox": "Require Signer to Check Consent Box"
+        },
         "multipleChoice": {
           "unlimited": "Unlimited",
           "exactNumber": "Exact number",

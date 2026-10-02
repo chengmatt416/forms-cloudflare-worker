@@ -888,4 +888,150 @@ test.describe('Live Production E2E Full User Journey', () => {
     await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
     await mobileContext.close()
   })
+
+  test('16. Legal E-Signature & Tamper-Proof Audit Trail with Digital Certificate', async ({
+    page,
+    browser
+  }) => {
+    // 16a. Admin creates a form with Legal E-Signature question enabled
+    const loginRes = await gql(`query Login($input: LoginInput!) { login(input: $input) }`, {
+      input: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
+    })
+    const adminCookie = loginRes.setCookie
+
+    const createRes = await gql(
+      `mutation CreateForm($input: CreateFormInput!) { createForm(input: $input) }`,
+      {
+        input: {
+          projectId: 'ee8ee3fd02a64596',
+          name: `Legal E-Signature Flow ${Date.now()}`
+        }
+      },
+      adminCookie
+    )
+    const newFormId = createRes.json?.data?.createForm
+    expect(newFormId).toBeTruthy()
+
+    const legalConsentText =
+      '本人聲明此電子簽章具備法律效力，等同於本人親筆簽名，並同意記錄簽署時間、IP位址與防竄改數位指紋作為存證紀錄。'
+
+    await gql(
+      `mutation PublishForm($input: UpdateFormSchemasInput!) { publishForm(input: $input) }`,
+      {
+        input: {
+          formId: newFormId,
+          drafts: [
+            { id: 'q1_contract', kind: 'short_text', title: 'Contract Party Name' },
+            {
+              id: 'q2_legalsig',
+              kind: 'signature',
+              title: '法定電子簽署 (Legally Binding E-Signature)',
+              properties: {
+                isLegalSignature: true,
+                legalConsentText,
+                requireConsentCheckbox: true
+              }
+            }
+          ]
+        }
+      },
+      adminCookie
+    )
+
+    // 16b. Respondent answers the form
+    const respondentContext = await browser.newContext()
+    const respondentPage = await respondentContext.newPage()
+    await respondentPage.goto(`${BASE_URL}/form/${newFormId}`)
+    await respondentPage.waitForLoadState('networkidle')
+
+    // Question 1: Fill name
+    const partyName = `Legal Signer ${Date.now()}`
+    const input = respondentPage.locator('input[placeholder="Your answer goes here"]')
+    await expect(input).toBeVisible({ timeout: 15000 })
+    await input.fill(partyName)
+    const nextBtn = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn).toBeVisible()
+    await nextBtn.click()
+    await respondentPage.waitForTimeout(1000)
+
+    // Question 2: Signature with Legal Disclosure
+    const canvas = respondentPage.locator('.heyform-body-active canvas').first()
+    await expect(canvas).toBeVisible({ timeout: 15000 })
+
+    // Verify Legal Notice & Consent Box is visible
+    await expect(
+      respondentPage
+        .locator('text=Legal E-Signature & Audit Trail Active')
+        .or(respondentPage.locator('text=法定電子簽章與不可否認性存證已啟用'))
+    ).toBeVisible({ timeout: 10000 })
+
+    await expect(respondentPage.locator('text=SHA-256 Tamper-Proof')).toBeVisible()
+    await expect(respondentPage.locator(`text=${legalConsentText}`)).toBeVisible()
+
+    // Draw signature
+    const box = await canvas.boundingBox()
+    expect(box).toBeTruthy()
+    const startX = box!.x + 30
+    const startY = box!.y + 30
+    await respondentPage.mouse.move(startX, startY)
+    await respondentPage.mouse.down()
+    for (let i = 1; i <= 8; i++) {
+      await respondentPage.mouse.move(startX + i * 15, startY + (i % 2 === 0 ? 10 : -10))
+      await respondentPage.waitForTimeout(30)
+    }
+    await respondentPage.mouse.up()
+    await respondentPage.waitForTimeout(400)
+
+    // Submit form
+    const submitBtn = respondentPage.locator('.heyform-body-active button:has-text("Submit")')
+    await expect(submitBtn).toBeVisible()
+    await submitBtn.click()
+
+    await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
+    await respondentContext.close()
+
+    // 16c. Admin inspects Submissions Inbox & Verifies Legal Audit Badge
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${newFormId}/submissions`
+    )
+    await page.waitForLoadState('networkidle')
+
+    // Verify submission row appears with partyName
+    await expect(page.locator(`text=${partyName}`).first()).toBeVisible({ timeout: 15000 })
+
+    // Verify Legal Audit Badge is present
+    const auditBadge = page.locator('text=具法律效力 (Audit Trail)').first()
+    await expect(auditBadge).toBeVisible({ timeout: 10000 })
+
+    // 16d. Click Legal Audit Badge to open Digital Certificate Modal
+    await auditBadge.click()
+
+    // Verify Digital Certificate modal renders
+    const certModal = page.locator('text=電子簽名數位存證證書').first()
+    await expect(certModal).toBeVisible({ timeout: 10000 })
+
+    // Verify Live SHA-256 Hash Verification Match
+    await expect(page.locator('text=SHA-256 MATCH').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=密碼學防竄改檢驗：數位指紋完整無缺').first()).toBeVisible()
+
+    // Verify Signature record and SEALED badge
+    await expect(page.locator('text=SEALED').first()).toBeVisible()
+
+    // Verify Legal consent declaration text inside certificate
+    await expect(page.locator(`text=${legalConsentText}`).first()).toBeVisible()
+
+    // Verify Network & Environment evidence (IP, timestamp, telemetry)
+    await expect(page.locator('text=伺服器驗證 IP 位址').first()).toBeVisible()
+    await expect(page.locator('text=存證時間戳記').first()).toBeVisible()
+    await expect(page.locator('text=不可否認性密碼學指紋').first()).toBeVisible()
+
+    // Verify Print button is present
+    await expect(page.locator('text=列印 / 匯出存證證書').first()).toBeVisible()
+  })
 })

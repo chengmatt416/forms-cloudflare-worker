@@ -40,6 +40,10 @@ export default {
     'Press Space to toggle pen up/down. Press ESC or click Done to finish',
   Done: 'Done',
   Clear: 'Clear',
+  'Legal E-Signature & Audit Trail Active': 'Legal E-Signature & Audit Trail Active',
+  'I agree to the legal declaration above': 'I agree to the legal declaration above',
+  'You must agree to the legal declaration to proceed':
+    'You must agree to the legal declaration to proceed',
   Yes: 'Yes',
   No: 'No',
   'Hit Shift ⇧ + Enter ↵ for new line': 'Hit Shift ⇧ + Enter ↵ for new line',

@@ -1,5 +1,11 @@
 import { Answer, Choice, Column, FieldKindEnum } from '@heyform-inc/shared-types-enums'
-import { IconArrowUpRight, IconCheck, IconClock, IconFile } from '@tabler/icons-react'
+import {
+  IconArrowUpRight,
+  IconCheck,
+  IconClock,
+  IconFile,
+  IconShieldCheck
+} from '@tabler/icons-react'
 import Big from 'big.js'
 import { FC, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,8 +21,9 @@ import {
 import { CURRENCY_SYMBOLS, htmlUtils } from '@heyform-inc/answer-utils'
 import { helper } from '@heyform-inc/utils'
 
-import { Badge, Checkbox, Image } from '@/components'
+import { Badge, Checkbox } from '@/components'
 import { ALL_FIELD_CONFIGS, CUSTOM_FIELDS_CONFIGS } from '@/consts'
+import { useAppStore } from '@/store'
 import { FormFieldType, SubmissionType } from '@/types'
 
 import { QuestionIcon } from '../Builder/LeftSidebar/QuestionList'
@@ -347,22 +354,60 @@ const PaymentItem: FC<SubmissionCellProps> = ({ answer, field }) => {
   )
 }
 
-const SignatureItem: FC<SubmissionCellProps> = ({ answer }) => {
+const SignatureItem: FC<SubmissionCellProps> = ({ answer, submission }) => {
+  const { openModal } = useAppStore()
+
   if (!answer?.value) {
     return null
   }
-  const isDataUrl = typeof answer.value === 'string' && answer.value.startsWith('data:image/')
-  const isHttpUrl = helper.isURL(answer.value)
+
+  const rawVal = answer.value
+  const signatureUrl =
+    typeof rawVal === 'string'
+      ? rawVal
+      : typeof rawVal === 'object' && rawVal !== null
+        ? rawVal.signature
+        : ''
+  const audit = typeof rawVal === 'object' && rawVal !== null ? rawVal.audit : undefined
+
+  const isDataUrl = typeof signatureUrl === 'string' && signatureUrl.startsWith('data:image/')
+  const isHttpUrl = helper.isURL(signatureUrl)
   if (!isDataUrl && !isHttpUrl) {
     return null
   }
 
+  const handleOpenCertificate = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    openModal('SignatureAuditModal', {
+      signatureUrl,
+      audit,
+      formId: submission?.formId,
+      submissionId: submission?.id,
+      title: submission?.title,
+      submitDate: (submission as any)?.createdAt || (submission as any)?.submittedAt
+    })
+  }
+
   return (
-    <img
-      src={answer.value}
-      alt="Signature"
-      className="h-10 w-20 rounded border border-gray-200 bg-white object-contain"
-    />
+    <div className="flex items-center gap-2 py-1">
+      <img
+        src={signatureUrl}
+        alt="Signature"
+        onClick={handleOpenCertificate}
+        title="點擊檢視數位簽名存證證書"
+        className="h-10 w-20 cursor-pointer rounded border border-gray-200 bg-white object-contain transition-transform hover:scale-105"
+      />
+
+      <button
+        type="button"
+        onClick={handleOpenCertificate}
+        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-50/80 px-2 py-1 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/40 dark:text-emerald-300"
+        title="檢視電子簽章存證證書 (SHA-256 Verified)"
+      >
+        <IconShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <span className="whitespace-nowrap">🛡️ 具法律效力 (Audit Trail)</span>
+      </button>
+    </div>
   )
 }
 

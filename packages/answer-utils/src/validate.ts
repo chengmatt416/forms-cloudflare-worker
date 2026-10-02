@@ -594,11 +594,18 @@ function validateInputTable(rule: FieldsToValidateRules, value: AnswerValue): vo
 }
 
 function validateSignature(rule: FieldsToValidateRules, value: AnswerValue): void {
-  let valid = helper.isString(value) && value.startsWith('data:image/png;base64,')
+  let sig = value
+  if (typeof value === 'object' && value !== null && 'signature' in (value as any)) {
+    sig = (value as any).signature
+  }
 
-  if (!valid && helper.isString(value)) {
+  let valid =
+    helper.isString(sig) &&
+    (sig.startsWith('data:image/png;base64,') || sig.startsWith('data:image/'))
+
+  if (!valid && helper.isString(sig)) {
     try {
-      const url = new URL(value)
+      const url = new URL(sig)
       valid = url.protocol === 'http:' || url.protocol === 'https:'
     } catch {
       valid = false
