@@ -22,7 +22,28 @@ export function getPreferredLanguage(languages: string[], fallback: string) {
   return lang || fallback
 }
 
-export function getFormLanguage(languages: string[], formLocale?: string) {
+export function getFormLanguage(languages: string[], formLocale?: string, queryLocale?: string) {
+  const query = normalizeCode(queryLocale)
+  if (query) {
+    const queryMatch = languages.find(
+      lang =>
+        normalizeCode(lang) === query ||
+        query.startsWith(normalizeCode(lang)!) ||
+        normalizeCode(lang)!.startsWith(query)
+    )
+    if (queryMatch) return queryMatch
+  }
+
   const locale = normalizeCode(formLocale)
-  return locale && languages.includes(locale) ? locale : getPreferredLanguage(languages, 'en')
+  if (locale) {
+    const formMatch = languages.find(
+      lang =>
+        normalizeCode(lang) === locale ||
+        locale.startsWith(normalizeCode(lang)!) ||
+        normalizeCode(lang)!.startsWith(locale)
+    )
+    if (formMatch) return formMatch
+  }
+
+  return getPreferredLanguage(languages, 'en')
 }

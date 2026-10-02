@@ -356,24 +356,39 @@ button.button-icon-only {
 // ----------------------------------------------------------------------------
 // Radio
 .heyform-radio {
-  @apply mb-2 cursor-pointer;
-  min-height: 2.5rem;
+  @apply mb-2.5 cursor-pointer select-none;
+  min-height: 2.75rem;
+
+  @media (max-width: 800px) {
+    min-height: 3.25rem;
+    margin-bottom: 0.625rem;
+  }
 
   &.heyform-radio-highlighted {
     .heyform-radio-container {
-      background-color: var(--heyform-answer-opacity-30-color);
+      background-color: var(--heyform-answer-opacity-25-color);
     }
   }
 }
 
 .heyform-radio-container {
-  @apply flex w-full rounded-md px-3 py-2 transition;
+  @apply flex w-full items-center rounded-xl px-3.5 py-2.5 transition-all duration-150;
+  border: 1.5px solid transparent;
 
   background-color: var(--heyform-answer-opacity-10-color);
   color: var(--heyform-answer-color);
 
   &:hover {
-    background-color: var(--heyform-answer-opacity-30-color);
+    background-color: var(--heyform-answer-opacity-20-color);
+  }
+
+  &:active {
+    transform: scale(0.985);
+  }
+
+  @media (max-width: 800px) {
+    padding: 0.875rem 1rem;
+    min-height: 3.25rem;
   }
 }
 
@@ -382,13 +397,18 @@ button.button-icon-only {
 }
 
 .heyform-radio-hotkey {
-  @apply flex h-6 w-6 items-center justify-center rounded-sm bg-white text-xs font-bold;
+  @apply flex h-6 w-6 items-center justify-center rounded-md bg-white text-xs font-bold transition-colors flex-shrink-0;
   background-color: var(--heyform-background-color);
-  box-shadow: var(--heyform-answer-opacity-60-color) 0 0 0 1px inset;
+  box-shadow: var(--heyform-answer-opacity-50-color) 0 0 0 1px inset;
+
+  @media (max-width: 800px) {
+    height: 1.75rem;
+    width: 1.75rem;
+  }
 }
 
 .heyform-radio-label {
-  @apply ml-2 mr-2 flex-1;
+  @apply ml-2.5 mr-2 flex-1;
 }
 
 .heyform-radio-other {
@@ -415,16 +435,17 @@ button.button-icon-only {
   .heyform-radio-icon {
     @apply visible opacity-100;
   }
-}
 
-.heyform-radio-selected {
   .heyform-radio-container {
-    box-shadow: none;
+    border-color: var(--heyform-button-color);
+    background-color: var(--heyform-answer-opacity-20-color);
+    box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.08);
   }
 
   .heyform-radio-hotkey {
-    color: var(--heyform-background-color);
-    background-color: var(--heyform-answer-opacity-80-color);
+    color: var(--heyform-button-text-color);
+    background-color: var(--heyform-button-color);
+    box-shadow: none;
   }
 }
 
@@ -546,11 +567,28 @@ button.button-icon-only {
 }
 
 .heyform-root {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   background-color: var(--heyform-background-color);
   --heyform-form-max-width: 1120px;
-  --heyform-question-transition-duration: 1000ms;
+  --heyform-question-transition-duration: 650ms;
   --heyform-question-transition-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --heyform-question-transition-distance: 100vh;
+  --heyform-question-transition-distance: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.heyform-top-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  min-width: 4px;
+  background-color: var(--heyform-button-color, #2563eb);
+  transition: width 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 50;
+  pointer-events: none;
 }
 
 .heyform-root-android {
@@ -995,19 +1033,21 @@ button.button-icon-only {
 .heyform-input[type='tel'],
 .heyform-textarea,
 .heyform-autoresize-textarea {
-  @apply w-full border-none bg-transparent p-0 pb-2 text-2xl shadow-none outline-none transition;
+  @apply w-full border-none bg-transparent p-0 pb-2 text-xl md:text-2xl shadow-none outline-none transition;
+  font-size: max(16px, 1.25rem);
+  line-height: 1.5;
   color: var(--heyform-answer-color);
   border-radius: 0;
-  border-bottom: 1px solid var(--heyform-answer-opacity-30-color);
+  border-bottom: 2px solid var(--heyform-answer-opacity-30-color);
 
   &:focus {
-    @apply -mb-px border-2;
+    @apply -mb-px border-b-2;
     box-shadow: none;
-    border-color: var(--heyform-answer-opacity-80-color);
+    border-color: var(--heyform-button-color);
   }
 
   &::placeholder {
-    color: var(--heyform-answer-opacity-30-color);
+    color: var(--heyform-answer-opacity-40-color);
   }
 }
 
@@ -1599,30 +1639,32 @@ button.button-icon-only {
 // ----------------------------------------------------------------------------
 // Header
 .heyform-header {
-  @apply absolute left-0 top-0 z-20 w-full px-4 py-2 md:py-4;
+  @apply pointer-events-none absolute left-0 top-0 z-20 w-full;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .heyform-header-wrapper {
-  @apply flex items-center justify-between;
+  @apply flex items-center justify-between px-4 py-2.5 md:px-6 md:py-4;
 }
 
 .heyform-header-left,
 .heyform-header-right {
-  @apply flex items-center;
+  @apply pointer-events-auto flex items-center;
 }
 
 .heyform-logo {
-  @apply pt-2 pl-2;
+  @apply pt-1 pl-1;
 
   img {
-    @apply block h-10 w-auto sm:h-8;
+    @apply block h-9 w-auto sm:h-8;
   }
 }
 
 // ----------------------------------------------------------------------------
 // Footer
 .heyform-footer {
-  @apply pointer-events-none absolute bottom-0 left-0 z-20 w-full bg-white/30 p-4 backdrop-blur-sm md:bg-transparent md:backdrop-filter-none;
+  @apply pointer-events-none absolute bottom-0 left-0 z-20 w-full p-3 md:p-4;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .heyform-footer-wrapper,
@@ -1639,6 +1681,47 @@ button.button-icon-only {
 .heyform-footer-left,
 .heyform-footer-right {
   @apply pointer-events-auto;
+}
+
+.heyform-footer-mobile {
+  @apply pointer-events-auto flex w-full items-center justify-center;
+}
+
+.heyform-mobile-dock {
+  @apply flex items-center gap-1.5 rounded-full px-3 py-1.5 shadow-lg backdrop-blur-md;
+  background-color: var(--heyform-button-color);
+  color: var(--heyform-button-text-color);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.25);
+}
+
+.heyform-mobile-nav-btn {
+  @apply flex h-10 w-10 items-center justify-center rounded-full transition-transform outline-none;
+  background: transparent;
+  color: var(--heyform-button-text-color);
+  -webkit-tap-highlight-color: transparent;
+
+  &:active:not(:disabled) {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+.heyform-mobile-counter {
+  @apply flex items-center gap-1 px-2.5 text-xs font-semibold tracking-wide;
+  color: var(--heyform-button-text-color);
+  user-select: none;
+}
+
+.heyform-mobile-list-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  margin-left: 2px;
+  padding-left: 4px;
 }
 
 .heyform-welcome-footer {
@@ -1769,12 +1852,17 @@ button.heyform-pagination-previous {
 }
 
 button.heyform-submit-button {
-  @apply relative inline-flex items-center justify-center rounded-md px-5 py-1.5 text-lg font-medium shadow-none outline-none;
+  @apply relative inline-flex items-center justify-center rounded-xl px-6 py-2.5 text-base md:text-lg font-semibold shadow-none outline-none transition-all duration-150;
+  min-height: 48px;
   background-color: var(--heyform-button-color);
   color: var(--heyform-button-text-color);
 
   &:hover {
     background-color: var(--heyform-button-opacity-80-color);
+  }
+
+  &:active {
+    transform: scale(0.97);
   }
 
   svg {

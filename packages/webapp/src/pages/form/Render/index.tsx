@@ -8,6 +8,7 @@ import { FormService } from '@/services'
 import { useParam, useQuery } from '@/utils'
 
 import { Async } from '@/components'
+import i18n from '@/i18n'
 import '@/styles/render.scss'
 import { FormThemeSettings } from '@/types'
 
@@ -38,7 +39,15 @@ export default function FormRender() {
     }
 
     setForm(result)
-    setLocale(getFormLanguage(LANGUAGES, result.settings?.locale))
+    const targetLocale = getFormLanguage(
+      LANGUAGES,
+      result.settings?.locale,
+      (query?.locale || query?.lang) as string
+    )
+    setLocale(targetLocale)
+    if (i18n && typeof i18n.changeLanguage === 'function' && i18n.language !== targetLocale) {
+      i18n.changeLanguage(targetLocale)
+    }
 
     return true
   }

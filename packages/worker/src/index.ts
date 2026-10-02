@@ -6,7 +6,7 @@ import { schema } from './graphql/schema'
 import { graphql } from 'graphql'
 
 import { parseCookies, verifySessionToken } from './auth'
-import { Env, User } from './types'
+import { Env, FormRow, SubmissionRow, User } from './types'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -189,6 +189,224 @@ app.get('/api/image', async c => {
   return c.redirect(targetUrl, 302)
 })
 
+// Export submissions CSV
+app.get('/api/export/submissions', async c => {
+  const formId = c.req.query('formId')
+  if (!formId) {
+    return c.text('Form ID is required', 400)
+  }
+
+  const cookieHeader = c.req.header('Cookie') || null
+  const cookies = parseCookies(cookieHeader)
+  const sessionToken =
+    cookies['HEYFORM_SESSION'] || c.req.header('Authorization')?.replace('Bearer ', '')
+
+  let userId: string | null = null
+  if (sessionToken) {
+    const verified = await verifySessionToken(sessionToken, c.env.SESSION_SECRET)
+    if (verified?.userId) {
+      userId = verified.userId
+    }
+  }
+
+  // Find form
+  const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
+    .bind(formId)
+    .first<FormRow>()
+
+  if (!form) {
+    return c.text('Form not found', 404)
+  }
+
+  // Fetch all submissions for this form
+  const submissionsResult = await c.env.DB.prepare(
+    'SELECT * FROM submissions WHERE form_id = ? ORDER BY created_at DESC'
+  )
+    .bind(formId)
+    .all<SubmissionRow>()
+
+  const submissions = submissionsResult.results || []
+
+  function parseJsonSafe<T>(val: string | null | undefined, fallback: T): T {
+    if (!val) return fallback
+    try {
+      return JSON.parse(val)
+    } catch {
+      return fallback
+    }
+  }
+
+  // Extract form fields
+  const rawFields = parseJsonSafe<any[]>(form.fields, [])
+  const rawDrafts = parseJsonSafe<any[]>(form.drafts, [])
+  const allFields = rawFields.length > 0 ? rawFields : rawDrafts
+
+  function flatten(fields: any[]): any[] {
+    const out: any[] = []
+    for (const f of fields) {
+      if (f.properties?.fields && Array.isArray(f.properties.fields)) {
+        out.push(...flatten(f.properties.fields))
+      } else {
+        out.push(f)
+      }
+    }
+    return out
+  }
+
+  const selectedFields = flatten(allFields).filter(
+    f => f.kind !== 'welcome' && f.kind !== 'thank_you'
+  )
+
+  // Extract hidden fields
+  const rawHidden = parseJsonSafe<any[]>(form.hidden_fields, [])
+  const hiddenFields = (Array.isArray(rawHidden) ? rawHidden : []).map((h: any) =>
+    typeof h === 'string' ? { id: h, name: h } : { id: h.id, name: h.name || h.id || '' }
+  )
+
+  function formatAnswerForCsv(val: any): string {
+    if (val === null || val === undefined) return ''
+    if (typeof val === 'string') {
+      if (val.startsWith('data:image/')) return '[Signature Image]'
+      return val
+    }
+    if (typeof val === 'number' || typeof val === 'boolean') {
+      return String(val)
+    }
+    if (Array.isArray(val)) {
+      return val.map(formatAnswerForCsv).join(', ')
+    }
+    if (typeof val === 'object') {
+      if (val.url) return val.url
+      if (val.key) return val.key
+      if (val.firstName !== undefined || val.lastName !== undefined) {
+        return [val.firstName, val.lastName].filter(Boolean).join(' ')
+      }
+      if (val.address1 !== undefined || val.city !== undefined) {
+        return [val.address1, val.address2, val.city, val.state, val.zip, val.country]
+          .filter(Boolean)
+          .join(', ')
+      }
+      if (val.signature !== undefined) {
+        if (typeof val.signature === 'string' && val.signature.startsWith('data:image/')) {
+          const auditId = val.audit?.auditId ? ` - Audit #${val.audit.auditId}` : ''
+          return `[Signature Signed${auditId}]`
+        }
+        return String(val.signature)
+      }
+      return JSON.stringify(val)
+    }
+    return String(val)
+  }
+
+  function escapeCsvValue(val: any): string {
+    if (val === null || val === undefined) return ''
+    let str = String(val)
+    const trimmed = str.trimStart()
+    if (
+      trimmed.startsWith('=') ||
+      trimmed.startsWith('+') ||
+      trimmed.startsWith('-') ||
+      trimmed.startsWith('@')
+    ) {
+      str = `'${str}`
+    }
+    if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+
+  // Build CSV headers
+  const headers = [
+    '#',
+    ...selectedFields.map(f => {
+      let t = f.title
+      if (Array.isArray(t)) {
+        t = t.map((item: any) => (typeof item === 'string' ? item : item?.text || '')).join('')
+      }
+      return String(t || f.id)
+    }),
+    ...hiddenFields.map(h => String(h.name || h.id)),
+    'Start Date (UTC)',
+    'Submit Date (UTC)'
+  ]
+
+  const csvRows: string[] = []
+  csvRows.push(headers.map(escapeCsvValue).join(','))
+
+  for (const sub of submissions) {
+    const rawAnswers = parseJsonSafe<Record<string, any>>(sub.answers, {})
+    const subHidden = parseJsonSafe<any[]>(sub.hidden_fields, [])
+    const rowCells: string[] = []
+
+    // 1. #
+    rowCells.push(escapeCsvValue(sub.id))
+
+    // 2. Question answers
+    for (const field of selectedFields) {
+      let val: any = undefined
+      if (Array.isArray(rawAnswers)) {
+        const found = rawAnswers.find((a: any) => a.id === field.id)
+        val = found?.value
+      } else if (rawAnswers && typeof rawAnswers === 'object') {
+        const entry = rawAnswers[field.id]
+        if (entry !== undefined) {
+          if (typeof entry === 'object' && entry !== null && 'value' in entry) {
+            val = entry.value
+          } else if (typeof entry === 'object' && entry !== null && 'signature' in entry) {
+            val = entry.signature
+          } else {
+            val = entry
+          }
+        }
+      }
+      rowCells.push(escapeCsvValue(formatAnswerForCsv(val)))
+    }
+
+    // 3. Hidden fields
+    for (const hf of hiddenFields) {
+      let hVal = ''
+      if (Array.isArray(subHidden)) {
+        const found = subHidden.find((h: any) => h.id === hf.id || h.name === hf.name)
+        hVal = found?.value || ''
+      } else if (subHidden && typeof subHidden === 'object') {
+        hVal = (subHidden as any)[hf.id] || (subHidden as any)[hf.name] || ''
+      }
+      rowCells.push(escapeCsvValue(hVal))
+    }
+
+    // 4. Start date (UTC)
+    const startStr = sub.start_at ? new Date(sub.start_at).toISOString() : ''
+    rowCells.push(escapeCsvValue(startStr))
+
+    // 5. Submit date (UTC)
+    const submitStr = sub.end_at
+      ? new Date(sub.end_at).toISOString()
+      : sub.created_at
+        ? new Date(sub.created_at).toISOString()
+        : ''
+    rowCells.push(escapeCsvValue(submitStr))
+
+    csvRows.push(rowCells.join(','))
+  }
+
+  // Prepend UTF-8 BOM so Excel and Numbers correctly decode Unicode/Chinese
+  const csvContent = '\uFEFF' + csvRows.join('\r\n')
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const safeFormName = (form.name || 'submissions').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5-]/g, '_')
+  const filename = `${safeFormName}-${dateStr}.csv`
+
+  return new Response(csvContent, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    }
+  })
+})
+
 let hasSignatureTable = false
 async function ensureSignatureTable(db: any) {
   if (hasSignatureTable) return
@@ -346,16 +564,37 @@ app.get('/sign/:id', async c => {
     }
     .title { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
     .subtitle { font-size: 0.85rem; color: #94a3b8; margin-top: 2px; }
-    .canvas-container {
+    .main-body {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      overflow: hidden;
+    }
+    .canvas-container {
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 2.5 / 1;
+      min-height: 180px;
+      max-height: 240px;
       position: relative;
       background: #1e293b;
-      margin: 16px;
       border-radius: 16px;
       border: 2px dashed #475569;
       overflow: hidden;
       display: flex;
       touch-action: none;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+    .hint-bar {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     canvas {
       width: 100%;
@@ -366,10 +605,10 @@ app.get('/sign/:id', async c => {
     }
     .guide-line {
       position: absolute;
-      bottom: 25%;
-      left: 8%;
-      right: 8%;
-      border-bottom: 2px solid #64748b;
+      bottom: 22%;
+      left: 6%;
+      right: 6%;
+      border-bottom: 2px dashed #475569;
       pointer-events: none;
       display: flex;
       align-items: center;
@@ -440,9 +679,14 @@ app.get('/sign/:id', async c => {
     </div>
   </div>
 
-  <div class="canvas-container" id="container">
-    <canvas id="signature-canvas"></canvas>
-    <div class="guide-line"><span class="guide-x">✕</span></div>
+  <div class="main-body">
+    <div class="canvas-container" id="container">
+      <canvas id="signature-canvas"></canvas>
+      <div class="guide-line"><span class="guide-x">✕</span></div>
+    </div>
+    <div class="hint-bar">
+      <span>📐 比例已與電腦簽名板同步（橫放手機可獲得更大書寫空間）</span>
+    </div>
   </div>
 
   <div class="footer">
@@ -549,6 +793,56 @@ app.get('/sign/:id', async c => {
       hasDrawn = false;
     });
 
+    function getAutoFilledSignature(srcCanvas) {
+      const srcCtx = srcCanvas.getContext('2d');
+      const w = srcCanvas.width;
+      const h = srcCanvas.height;
+      const imgData = srcCtx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      let minX = w, minY = h, maxX = 0, maxY = 0;
+      let hasPixels = false;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const alpha = data[(y * w + x) * 4 + 3];
+          if (alpha > 15) {
+            hasPixels = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (!hasPixels) return srcCanvas.toDataURL('image/png');
+
+      const pad = 10 * (window.devicePixelRatio || 1);
+      minX = Math.max(0, minX - pad);
+      minY = Math.max(0, minY - pad);
+      maxX = Math.min(w, maxX + pad);
+      maxY = Math.min(h, maxY + pad);
+
+      const strokeW = maxX - minX;
+      const strokeH = maxY - minY;
+
+      const out = document.createElement('canvas');
+      out.width = 800;
+      out.height = 320;
+      const outCtx = out.getContext('2d');
+
+      // Scale to comfortably fill 88% of target canvas width and height
+      const scale = Math.min((out.width * 0.88) / strokeW, (out.height * 0.88) / strokeH);
+      const drawW = strokeW * scale;
+      const drawH = strokeH * scale;
+      const offsetX = (out.width - drawW) / 2;
+      const offsetY = (out.height - drawH) / 2;
+
+      outCtx.drawImage(srcCanvas, minX, minY, strokeW, strokeH, offsetX, offsetY, drawW, drawH);
+      return out.toDataURL('image/png');
+    }
+
     submitBtn.addEventListener('click', async () => {
       if (!hasDrawn) {
         alert('Please draw your signature first.');
@@ -557,12 +851,11 @@ app.get('/sign/:id', async c => {
       submitBtn.disabled = true;
       submitBtn.innerText = 'Syncing...';
       try {
-        const rect = container.getBoundingClientRect();
-        const dataUrl = canvas.toDataURL('image/png');
+        const dataUrl = getAutoFilledSignature(canvas);
         const res = await fetch('/api/signature-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: sessionId, signature: dataUrl, canvasWidth: Math.round(rect.width), canvasHeight: Math.round(rect.height) })
+          body: JSON.stringify({ id: sessionId, signature: dataUrl, canvasWidth: 800, canvasHeight: 320 })
         });
         if (res.ok) {
           successOverlay.style.display = 'flex';

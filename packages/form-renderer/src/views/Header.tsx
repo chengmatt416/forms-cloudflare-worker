@@ -31,6 +31,12 @@ export const Header: FC = () => {
 
   return (
     <div className="heyform-header">
+      <div
+        className="heyform-top-progress"
+        style={{
+          width: `${Math.max(0, Math.min(100, state.percentage))}%`
+        }}
+      />
       <div className="heyform-header-wrapper">
         <div className="heyform-header-left">
           {state.logo && (

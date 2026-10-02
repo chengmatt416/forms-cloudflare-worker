@@ -2,8 +2,6 @@ import {
   IconCheck,
   IconDeviceMobile,
   IconEraser,
-  IconHandFinger,
-  IconPencil,
   IconQrcode,
   IconShieldCheck,
   IconShieldLock,
@@ -47,14 +45,6 @@ export const SignaturePad: FC<SignaturePadProps> = ({
   const { t } = useTranslation()
   const [canvasRef, setCanvasRef] = useState<HTMLCanvasElement | null>(null)
 
-  // Trackpad Direct Signing State
-  const [isTrackpadActive, setIsTrackpadActive] = useState(false)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [currentPressure, setCurrentPressure] = useState(1.0)
-  const trackpadCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
-  const isPointerDownRef = useRef(false)
-
   // Phone QR Code Signing State
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [qrSessionId, setQrSessionId] = useState<string>('')
@@ -65,7 +55,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({
   const strokeCountRef = useRef(0)
   const pointCountRef = useRef(0)
   const startedAtRef = useRef<number | null>(null)
-  const signingMethodRef = useRef<'canvas' | 'trackpad' | 'phone_sync'>('canvas')
+  const signingMethodRef = useRef<'canvas' | 'phone_sync'>('canvas')
   const [isConsentAccepted, setIsConsentAccepted] = useState(value?.audit?.consentAccepted ?? true)
 
   const defaultConsentText =
@@ -87,7 +77,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({
   const exportSignature = useCallback(
     async (
       dataUrl: string,
-      methodOverride?: 'canvas' | 'trackpad' | 'phone_sync',
+      methodOverride?: 'canvas' | 'phone_sync',
       overrideConsent?: boolean
     ) => {
       if (!dataUrl) {
@@ -298,215 +288,75 @@ export const SignaturePad: FC<SignaturePadProps> = ({
   }, [canvasRef])
 
   // ──────────────────────────────────────────────────────────
-  // Trackpad Mode: Dedicated high-precision drawing canvas
-  // with sub-pixel coalesced pointer events, Apple Force Touch,
-  // and continuous finger tracking directly on the trackpad.
+  // Auto-Crop & Fill: trims empty margins and scales signature to fill canvas
   // ──────────────────────────────────────────────────────────
+  const trimAndFitSignature = useCallback(
+    (img: HTMLImageElement, targetW: number, targetH: number, paddingPercent = 0.12): string => {
+      const off = document.createElement('canvas')
+      off.width = img.naturalWidth || img.width || 800
+      off.height = img.naturalHeight || img.height || 320
+      const ctx = off.getContext('2d')
+      if (!ctx) return img.src
 
-  const handleStartTrackpad = useCallback(() => {
-    if (!canvasRef) return
-    setIsTrackpadActive(true)
-    setIsDrawing(false)
-    lastPosRef.current = null
-    isPointerDownRef.current = false
-    signaturePad?.off()
-  }, [canvasRef, signaturePad])
+      ctx.drawImage(img, 0, 0)
+      const imgData = ctx.getImageData(0, 0, off.width, off.height)
+      const data = imgData.data
 
-  const handleExitTrackpad = useCallback(() => {
-    setIsTrackpadActive(false)
-    setIsDrawing(false)
-    lastPosRef.current = null
-    isPointerDownRef.current = false
+      let minX = off.width,
+        minY = off.height,
+        maxX = 0,
+        maxY = 0
+      let found = false
 
-    // Sync content from trackpad canvas to main canvas if drawn
-    if (trackpadCanvasRef.current && canvasRef) {
-      const mainCtx = canvasRef.getContext('2d')
-      if (mainCtx) {
-        mainCtx.clearRect(0, 0, canvasRef.offsetWidth, canvasRef.offsetHeight)
-        mainCtx.drawImage(
-          trackpadCanvasRef.current,
-          0,
-          0,
-          canvasRef.offsetWidth,
-          canvasRef.offsetHeight
-        )
-      }
-    }
-
-    if (canvasRef) {
-      const dataUrl = canvasRef.toDataURL('image/png')
-      exportSignature(dataUrl, 'trackpad')
-    }
-
-    if (signaturePad) {
-      signaturePad.on()
-    }
-  }, [signaturePad, exportSignature, canvasRef])
-
-  // Copy current canvas to trackpad canvas when opened
-  useEffect(() => {
-    if (isTrackpadActive && trackpadCanvasRef.current && canvasRef) {
-      const tCanvas = trackpadCanvasRef.current
-      const ratio = Math.max(window.devicePixelRatio || 1, 1)
-      const rect = tCanvas.getBoundingClientRect()
-      tCanvas.width = rect.width * ratio
-      tCanvas.height = rect.height * ratio
-      const ctx = tCanvas.getContext('2d')
-      if (ctx) {
-        ctx.scale(ratio, ratio)
-        ctx.drawImage(canvasRef, 0, 0, rect.width, rect.height)
-      }
-    }
-  }, [isTrackpadActive, canvasRef])
-
-  // Trackpad drawing handlers with high-frequency coalesced pointer sampling & Force Touch
-  const drawLine = useCallback(
-    (fromX: number, fromY: number, toX: number, toY: number, pressure: number) => {
-      const tCanvas = trackpadCanvasRef.current
-      if (!tCanvas) return
-      const ctx = tCanvas.getContext('2d')
-      if (!ctx) return
-
-      // Modulate line width based on finger pressure (0.5 to 2.5 multiplier)
-      const baseWidth = 3.2
-      const dynamicWidth = baseWidth * Math.max(0.6, Math.min(2.5, pressure || 1.0))
-
-      ctx.beginPath()
-      ctx.strokeStyle = penColor || '#1e293b'
-      ctx.lineWidth = dynamicWidth
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.moveTo(fromX, fromY)
-      ctx.lineTo(toX, toY)
-      ctx.stroke()
-    },
-    [penColor]
-  )
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      e.preventDefault()
-      const tCanvas = trackpadCanvasRef.current
-      if (!tCanvas) return
-
-      try {
-        tCanvas.setPointerCapture(e.pointerId)
-      } catch {}
-
-      const rect = tCanvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-
-      isPointerDownRef.current = true
-      setIsDrawing(true)
-      lastPosRef.current = { x, y }
-      strokeCountRef.current += 1
-      pointCountRef.current += 1
-      signingMethodRef.current = 'trackpad'
-      if (!startedAtRef.current) {
-        startedAtRef.current = Date.now()
-      }
-
-      const pressure = (e as any).pressure > 0 ? (e as any).pressure : 1.0
-      setCurrentPressure(pressure)
-
-      // Draw initial dot
-      drawLine(x, y, x + 0.1, y + 0.1, pressure)
-    },
-    [drawLine]
-  )
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!isPointerDownRef.current) return
-      e.preventDefault()
-      const tCanvas = trackpadCanvasRef.current
-      if (!tCanvas) return
-
-      const rect = tCanvas.getBoundingClientRect()
-
-      // Use coalesced events to capture all micro-finger positions between frames
-      const events: Array<{ clientX: number; clientY: number; pressure?: number }> =
-        typeof (e.nativeEvent as any).getCoalescedEvents === 'function'
-          ? (e.nativeEvent as any).getCoalescedEvents()
-          : [e]
-
-      pointCountRef.current += events.length
-
-      for (const ev of events) {
-        const x = Math.max(0, Math.min(rect.width, ev.clientX - rect.left))
-        const y = Math.max(0, Math.min(rect.height, ev.clientY - rect.top))
-        const pressure = ev.pressure && ev.pressure > 0 ? ev.pressure : 1.0
-        setCurrentPressure(pressure)
-
-        if (lastPosRef.current) {
-          drawLine(lastPosRef.current.x, lastPosRef.current.y, x, y, pressure)
+      for (let y = 0; y < off.height; y++) {
+        for (let x = 0; x < off.width; x++) {
+          const alpha = data[(y * off.width + x) * 4 + 3]
+          if (alpha > 15) {
+            found = true
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
         }
-        lastPosRef.current = { x, y }
       }
+
+      if (!found) {
+        minX = 0
+        minY = 0
+        maxX = off.width
+        maxY = off.height
+      }
+
+      const pad = 8
+      minX = Math.max(0, minX - pad)
+      minY = Math.max(0, minY - pad)
+      maxX = Math.min(off.width, maxX + pad)
+      maxY = Math.min(off.height, maxY + pad)
+
+      const strokeW = Math.max(1, maxX - minX)
+      const strokeH = Math.max(1, maxY - minY)
+
+      const target = document.createElement('canvas')
+      target.width = targetW
+      target.height = targetH
+      const targetCtx = target.getContext('2d')
+      if (!targetCtx) return img.src
+
+      const maxFillW = targetW * (1 - paddingPercent)
+      const maxFillH = targetH * (1 - paddingPercent)
+      const scale = Math.min(maxFillW / strokeW, maxFillH / strokeH)
+      const drawW = strokeW * scale
+      const drawH = strokeH * scale
+      const offsetX = (targetW - drawW) / 2
+      const offsetY = (targetH - drawH) / 2
+
+      targetCtx.clearRect(0, 0, targetW, targetH)
+      targetCtx.drawImage(off, minX, minY, strokeW, strokeH, offsetX, offsetY, drawW, drawH)
+      return target.toDataURL('image/png')
     },
-    [drawLine]
+    []
   )
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    isPointerDownRef.current = false
-    setIsDrawing(false)
-    lastPosRef.current = null
-    try {
-      trackpadCanvasRef.current?.releasePointerCapture(e.pointerId)
-    } catch {}
-  }, [])
-
-  // Listen to Safari/macOS Force Touch event directly on the canvas
-  useEffect(() => {
-    const tCanvas = trackpadCanvasRef.current
-    if (!isTrackpadActive || !tCanvas) return
-
-    function handleForceChange(e: any) {
-      if (typeof e.webkitForce === 'number') {
-        const normPressure = Math.max(0.5, Math.min(2.5, e.webkitForce))
-        setCurrentPressure(normPressure)
-      }
-    }
-
-    tCanvas.addEventListener('webkitmouseforcechanged', handleForceChange)
-    return () => {
-      tCanvas.removeEventListener('webkitmouseforcechanged', handleForceChange)
-    }
-  }, [isTrackpadActive])
-
-  // ESC key to exit trackpad mode
-  useEffect(() => {
-    if (!isTrackpadActive) return
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.code === 'Escape') {
-        handleExitTrackpad()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isTrackpadActive, handleExitTrackpad])
-
-  // Clear trackpad canvas
-  const handleClearTrackpad = useCallback(() => {
-    const tCanvas = trackpadCanvasRef.current
-    if (tCanvas) {
-      const ctx = tCanvas.getContext('2d')
-      if (ctx) {
-        ctx.clearRect(0, 0, tCanvas.width, tCanvas.height)
-      }
-    }
-    if (canvasRef) {
-      const mainCtx = canvasRef.getContext('2d')
-      if (mainCtx) {
-        mainCtx.clearRect(0, 0, canvasRef.width, canvasRef.height)
-      }
-    }
-    signaturePad?.clear()
-    onChange?.('')
-  }, [canvasRef, signaturePad, onChange])
 
   // ──────────────────────────────────────────────────────────
   // Phone QR Code Signing with Proportion-Preserving Sync
@@ -550,23 +400,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({
               const destW = (canvasRef.offsetWidth || 400) * dpr
               const destH = (canvasRef.offsetHeight || 200) * dpr
 
-              const offscreen = document.createElement('canvas')
-              offscreen.width = destW
-              offscreen.height = destH
-              const offCtx = offscreen.getContext('2d')
-              if (!offCtx) return
-
-              const pW = phoneW > 0 ? phoneW : img.naturalWidth
-              const pH = phoneH > 0 ? phoneH : img.naturalHeight
-              const scale = Math.min((destW * 0.9) / pW, (destH * 0.9) / pH)
-              const drawW = pW * scale
-              const drawH = pH * scale
-              const offsetX = (destW - drawW) / 2
-              const offsetY = (destH - drawH) / 2
-
-              offCtx.clearRect(0, 0, destW, destH)
-              offCtx.drawImage(img, offsetX, offsetY, drawW, drawH)
-              const finalDataUrl = offscreen.toDataURL('image/png')
+              const finalDataUrl = trimAndFitSignature(img, destW, destH, 0.1)
 
               signingMethodRef.current = 'phone_sync'
               if (!startedAtRef.current) startedAtRef.current = Date.now()
@@ -588,7 +422,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({
         }
       } catch {}
     }, 1200)
-  }, [signaturePad, exportSignature, canvasRef])
+  }, [signaturePad, exportSignature, canvasRef, trimAndFitSignature])
 
   const handleCloseQrModal = useCallback(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
@@ -619,107 +453,11 @@ export const SignaturePad: FC<SignaturePadProps> = ({
         />
       </div>
 
-      {/* Trackpad Mode Direct Signing Overlay */}
-      {isTrackpadActive && (
-        <div className="animate-in fade-in fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-md duration-200">
-          {/* Top Bar */}
-          <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-            <div className="flex items-center gap-3">
-              <span
-                className={`flex h-3 w-3 rounded-full ${
-                  isDrawing ? 'animate-pulse bg-emerald-400' : 'bg-blue-400'
-                }`}
-              />
-              <span className="text-base font-semibold text-white">
-                {t('Trackpad Direct Signing Mode')}
-              </span>
-              <span className="hidden text-xs text-slate-400 md:inline">
-                — Touch and write with your finger on your laptop trackpad. Sub-pixel tracking
-                active.
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
-                onClick={handleClearTrackpad}
-              >
-                <IconEraser className="mr-1 inline h-3.5 w-3.5" />
-                {t('Clear')}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-lg transition-colors hover:bg-blue-500"
-                onClick={handleExitTrackpad}
-              >
-                {t('Done & Save')} (ESC)
-              </button>
-            </div>
-          </div>
-
-          {/* Central Trackpad Surface */}
-          <div className="flex flex-1 flex-col items-center justify-center p-6">
-            <div className="relative flex h-[60vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border-2 border-dashed border-blue-500/40 bg-slate-800/80 shadow-2xl">
-              {/* Guidance watermark */}
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-slate-600 select-none">
-                <IconHandFinger className="mb-3 h-16 w-16 text-slate-700" />
-                <p className="text-base font-medium text-slate-500">
-                  {t('Glide finger on trackpad to write signature')}
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {t('Press down to draw. Supports Force Touch pressure.')}
-                </p>
-              </div>
-
-              {/* Direct trackpad canvas */}
-              <canvas
-                ref={trackpadCanvasRef}
-                className="relative z-10 h-full w-full cursor-crosshair touch-none"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              />
-            </div>
-
-            {/* Bottom Status Tips */}
-            <div className="mt-4 flex items-center gap-4 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                Continuous sub-pixel finger tracking
-              </span>
-              <span>•</span>
-              <span>Pressure: {currentPressure.toFixed(2)}x</span>
-              <span>•</span>
-              <span>
-                Press{' '}
-                <kbd className="rounded bg-slate-700 px-1.5 py-0.5 font-mono text-white">ESC</kbd>{' '}
-                when finished
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Bottom Controls Bar */}
       <div className="heyform-signature-bottom mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="text-secondary text-xs">{t('Draw your signature above')}</span>
 
         <div className="flex items-center gap-1.5">
-          {/* Trackpad Mode Button */}
-          <button
-            type="button"
-            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all"
-            onClick={handleStartTrackpad}
-            title={t(
-              'Trackpad Mode - Full surface direct finger writing with pressure sensitivity'
-            )}
-          >
-            <IconPencil className="h-3.5 w-3.5 text-blue-500" />
-            <span>{t('Trackpad Mode')}</span>
-          </button>
-
           {/* Sign on Phone QR Code Button */}
           <button
             type="button"

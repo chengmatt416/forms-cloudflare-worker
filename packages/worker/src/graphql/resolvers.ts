@@ -739,7 +739,8 @@ export const rootResolver = {
       active: true,
       allowArchive: true,
       enableQuestionList: true,
-      enableNavigationArrows: true
+      enableNavigationArrows: true,
+      locale: context.user?.language || 'en'
     })
 
     const initialDrafts = [
@@ -914,7 +915,8 @@ export const rootResolver = {
       active: true,
       allowArchive: true,
       enableQuestionList: true,
-      enableNavigationArrows: true
+      enableNavigationArrows: true,
+      locale: context.user?.language || 'en'
     })
 
     const fields = [

@@ -9,6 +9,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import clsx from 'clsx'
 import type { FC } from 'react'
 import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import {
   applyEnhancedLogicToFields as applyLogicToFields,
@@ -174,6 +175,21 @@ export const FormRenderer: FC<FormRendererProps> = ({
     ]
   )
   const [state, dispatch] = useReducer(StoreReducer, memoState)
+  const { i18n } = useTranslation()
+
+  useEffect(() => {
+    if (locale) {
+      if (i18n && typeof i18n.changeLanguage === 'function' && i18n.language !== locale) {
+        i18n.changeLanguage(locale)
+      }
+      if (state.locale !== locale) {
+        dispatch({
+          type: 'setLocale',
+          payload: { locale }
+        })
+      }
+    }
+  }, [locale, i18n, state.locale])
 
   // Form suspended
   if (form.suspended) {

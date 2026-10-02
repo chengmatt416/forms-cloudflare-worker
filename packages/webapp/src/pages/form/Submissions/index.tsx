@@ -217,12 +217,46 @@ export default function FormSubmissions() {
     )
   }
 
+  const [isDownloading, setIsDownloading] = useState(false)
+
   function handleToggle() {
     toggle()
   }
 
-  function handleDownload() {
-    window.open(`/api/export/submissions?formId=${encodeURIComponent(formId)}`)
+  async function handleDownload() {
+    if (isDownloading) return
+    setIsDownloading(true)
+    try {
+      const res = await fetch(`/api/export/submissions?formId=${encodeURIComponent(formId)}`, {
+        credentials: 'include'
+      })
+      if (!res.ok) {
+        throw new Error('Failed to export submissions')
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const disposition = res.headers.get('Content-Disposition')
+      let filename = 'submissions.csv'
+      if (disposition && disposition.includes('filename')) {
+        const match = disposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;\r\n"']*)['"]?/i)
+        if (match && match[1]) {
+          filename = decodeURIComponent(match[1].replace(/['"]/g, ''))
+        }
+      }
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+      }, 1000)
+    } catch (err) {
+      window.open(`/api/export/submissions?formId=${encodeURIComponent(formId)}`)
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   function handleClose() {
@@ -280,7 +314,7 @@ export default function FormSubmissions() {
 
           <div className="flex items-center gap-x-2.5">
             <Tooltip label={t('form.submissions.downloadCSV')}>
-              <Button.Ghost size="md" iconOnly onClick={handleDownload}>
+              <Button.Ghost size="md" iconOnly loading={isDownloading} onClick={handleDownload}>
                 <IconDownload className="h-5 w-5" />
               </Button.Ghost>
             </Tooltip>

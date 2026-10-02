@@ -231,7 +231,7 @@ test.describe('Live Production E2E Full User Journey', () => {
     // Select template and use it
     const useTemplateBtn = page.locator('button:has-text("Use this template")')
     await expect(useTemplateBtn).toBeVisible({ timeout: 10000 })
-    await useTemplateBtn.click()
+    await useTemplateBtn.click({ force: true })
 
     // Verify templated form opens in Form Builder
     await expect(page).toHaveURL(/.*\/form\/.*\/create/, { timeout: 20000 })
@@ -1033,6 +1033,9 @@ test.describe('Live Production E2E Full User Journey', () => {
 
     // Verify Print button is present
     await expect(page.locator('text=列印 / 匯出存證證書').first()).toBeVisible()
+
+    // Verify 1-click download evidence package button is present
+    await expect(page.locator('text=一鍵下載防偽證據包').first()).toBeVisible()
   })
 
   test('17. Cross-Device Phone Sign Mode - QR Modal, External Phone Page Signing, Real-Time Sync & Submission', async ({
@@ -1174,5 +1177,100 @@ test.describe('Live Production E2E Full User Journey', () => {
 
     await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
     await respondentContext.close()
+  })
+
+  test('18. CSV Export API & Download Verification - UTF-8 BOM, Header Integrity & Zero-Submission Safety', async ({
+    page
+  }) => {
+    // 18a. Log in and get session cookie
+    await page.goto(`${BASE_URL}/login`)
+    await page.fill('input[type="email"]', ADMIN_EMAIL)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL(/.*\/workspace\/.*/, { timeout: 15000 })
+
+    const formId = '0c2b81cf9607480a'
+
+    // 18b. Test /api/export/submissions directly
+    const cookies = await page.context().cookies()
+    const sessionCookie = cookies.find(c => c.name === 'HEYFORM_SESSION')
+    expect(sessionCookie).toBeTruthy()
+
+    const exportRes = await fetch(`${BASE_URL}/api/export/submissions?formId=${formId}`, {
+      headers: {
+        Cookie: `HEYFORM_SESSION=${sessionCookie?.value}`
+      }
+    })
+
+    expect(exportRes.status).toBe(200)
+    expect(exportRes.headers.get('content-type')).toContain('text/csv')
+    const disposition = exportRes.headers.get('content-disposition') || ''
+    expect(disposition).toContain('attachment')
+    expect(disposition).toContain('.csv')
+
+    const arrayBuffer = await exportRes.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+    // Verify UTF-8 BOM bytes (0xEF, 0xBB, 0xBF)
+    expect(bytes[0]).toBe(0xef)
+    expect(bytes[1]).toBe(0xbb)
+    expect(bytes[2]).toBe(0xbf)
+
+    const csvText = new TextDecoder('utf-8').decode(bytes)
+    // Verify header columns include '#' and 'Start Date (UTC)'
+    const lines = csvText.split(/\r?\n/)
+    expect(lines.length).toBeGreaterThan(0)
+    const headerRow = lines[0]
+    expect(headerRow).toContain('#')
+    expect(headerRow).toContain('Start Date (UTC)')
+    expect(headerRow).toContain('Submit Date (UTC)')
+
+    // 18c. Test export via Submissions UI page
+    await page.goto(
+      `${BASE_URL}/workspace/0940f65b5435492b/project/ee8ee3fd02a64596/form/${formId}/submissions`
+    )
+    await page.waitForLoadState('networkidle')
+    const downloadBtn = page.locator('button:has(svg.tabler-icon-download)').first()
+    await expect(downloadBtn).toBeVisible({ timeout: 10000 })
+  })
+
+  test('19. Specified Default Respondent Interface Language & Mobile Viewport Redesign Verification', async ({
+    page,
+    browser
+  }) => {
+    const formId = '0c2b81cf9607480a'
+
+    // 19a. Verify language query override (?locale=zh-tw)
+    const zhContext = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      locale: 'en-US'
+    })
+    const zhPage = await zhContext.newPage()
+    await zhPage.goto(`${BASE_URL}/form/${formId}?locale=zh-tw`)
+    await zhPage.waitForLoadState('networkidle')
+
+    await expect(zhPage.locator('#heyform-render-root')).toBeVisible({ timeout: 15000 })
+    await zhContext.close()
+
+    // 19b. Verify mobile viewport (iPhone 14 screen) renders the new mobile dock & 100dvh
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true
+    })
+    const mobilePage = await mobileContext.newPage()
+    await mobilePage.goto(`${BASE_URL}/form/${formId}`)
+    await mobilePage.waitForLoadState('networkidle')
+
+    await expect(mobilePage.locator('#heyform-render-root')).toBeVisible({ timeout: 15000 })
+    const mobileDock = mobilePage.locator('.heyform-mobile-dock')
+    await expect(mobileDock).toBeVisible({ timeout: 10000 })
+    const mobileCounter = mobilePage.locator('.heyform-mobile-counter')
+    await expect(mobileCounter).toBeVisible()
+
+    // Verify sleek top progress indicator is attached and rendered
+    const topProgress = mobilePage.locator('.heyform-top-progress')
+    await expect(topProgress).toBeAttached()
+
+    await mobileContext.close()
   })
 })

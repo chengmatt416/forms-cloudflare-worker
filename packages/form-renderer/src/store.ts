@@ -229,6 +229,8 @@ const actions: any = {
 
   setStripe: (state: IState, { stripe }: any) => ({ ...state, stripe }),
 
+  setLocale: (state: IState, { locale }: any) => ({ ...state, locale }),
+
   resetErrorField: (state: IState) => ({ ...state, errorFieldId: undefined }),
 
   scrollPrevious: (state: IState) => {
