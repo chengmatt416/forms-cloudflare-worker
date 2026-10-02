@@ -40,6 +40,9 @@ export default {
     'Press Space to toggle pen up/down. Press ESC or click Done to finish',
   Done: 'Done',
   Clear: 'Clear',
+  'Open mobile signing page': 'Open mobile signing page',
+  'Copy signing link': 'Copy signing link',
+  'Signing link copied to clipboard!': 'Signing link copied to clipboard!',
   'Legal E-Signature & Audit Trail Active': 'Legal E-Signature & Audit Trail Active',
   'I agree to the legal declaration above': 'I agree to the legal declaration above',
   'You must agree to the legal declaration to proceed':

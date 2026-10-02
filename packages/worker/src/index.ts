@@ -454,6 +454,7 @@ app.get('/sign/:id', async c => {
     <div class="success-icon">✓</div>
     <h2 style="font-size: 1.5rem; margin-bottom: 12px; font-weight: 700;">Signature Synced Successfully!</h2>
     <p style="color: #94a3b8; font-size: 1rem; line-height: 1.6; max-width: 320px;">Your signature has been sent to your computer. You can return to your computer to finish the form.</p>
+    <button class="btn btn-submit" style="margin-top: 24px; max-width: 220px; flex: unset; padding: 12px 24px;" onclick="window.close()">Return to Form</button>
   </div>
 
   <script>
@@ -473,6 +474,12 @@ app.get('/sign/:id', async c => {
     function resizeCanvas() {
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
+      let prevData = null;
+      if (hasDrawn && canvas.width > 0 && canvas.height > 0) {
+        try {
+          prevData = canvas.toDataURL();
+        } catch {}
+      }
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       ctx.scale(dpr, dpr);
@@ -480,9 +487,17 @@ app.get('/sign/:id', async c => {
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      if (prevData) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        };
+        img.src = prevData;
+      }
     }
 
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', resizeCanvas);
     resizeCanvas();
 
     function getPos(e) {
@@ -524,6 +539,7 @@ app.get('/sign/:id', async c => {
     canvas.addEventListener('touchstart', start, { passive: false });
     canvas.addEventListener('touchmove', move, { passive: false });
     canvas.addEventListener('touchend', stop, { passive: false });
+    canvas.addEventListener('touchcancel', stop, { passive: false });
     canvas.addEventListener('mousedown', start);
     canvas.addEventListener('mousemove', move);
     window.addEventListener('mouseup', stop);

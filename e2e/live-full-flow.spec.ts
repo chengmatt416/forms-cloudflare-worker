@@ -1034,4 +1034,145 @@ test.describe('Live Production E2E Full User Journey', () => {
     // Verify Print button is present
     await expect(page.locator('text=列印 / 匯出存證證書').first()).toBeVisible()
   })
+
+  test('17. Cross-Device Phone Sign Mode - QR Modal, External Phone Page Signing, Real-Time Sync & Submission', async ({
+    page,
+    browser
+  }) => {
+    // 17a. Admin creates a form with signature question
+    const loginRes = await gql(`query Login($input: LoginInput!) { login(input: $input) }`, {
+      input: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
+    })
+    const adminCookie = loginRes.setCookie
+
+    const createRes = await gql(
+      `mutation CreateForm($input: CreateFormInput!) { createForm(input: $input) }`,
+      {
+        input: {
+          projectId: 'ee8ee3fd02a64596',
+          name: `Phone Sign Mode Form ${Date.now()}`
+        }
+      },
+      adminCookie
+    )
+    const newFormId = createRes.json?.data?.createForm
+    expect(newFormId).toBeTruthy()
+
+    await gql(
+      `mutation PublishForm($input: UpdateFormSchemasInput!) { publishForm(input: $input) }`,
+      {
+        input: {
+          formId: newFormId,
+          drafts: [
+            { id: 'q1_contract_name', kind: 'short_text', title: 'Signer Name' },
+            { id: 'q2_phone_signature', kind: 'signature', title: 'Contract Signature' }
+          ]
+        }
+      },
+      adminCookie
+    )
+
+    // 17b. Respondent opens form on desktop
+    const respondentContext = await browser.newContext()
+    const respondentPage = await respondentContext.newPage()
+    await respondentPage.goto(`${BASE_URL}/form/${newFormId}`)
+    await respondentPage.waitForLoadState('networkidle')
+
+    // Fill Name
+    const signerName = `Phone Signer ${Date.now()}`
+    const input = respondentPage.locator('input[placeholder="Your answer goes here"]')
+    await expect(input).toBeVisible({ timeout: 15000 })
+    await input.fill(signerName)
+    const nextBtn = respondentPage.locator('.heyform-body-active button:has-text("Next")')
+    await expect(nextBtn).toBeVisible()
+    await nextBtn.click()
+    await respondentPage.waitForTimeout(1000)
+
+    // Verify Sign on Phone button is visible
+    const phoneSignBtn = respondentPage
+      .locator('button:has-text("Sign on Phone"), button:has-text("手機掃碼簽名")')
+      .first()
+    await expect(phoneSignBtn).toBeVisible({ timeout: 10000 })
+    await phoneSignBtn.click()
+
+    // Verify QR Modal appears
+    await expect(
+      respondentPage
+        .locator('text=Scan to Sign on Phone')
+        .or(respondentPage.locator('text=手機掃碼簽名'))
+        .first()
+    ).toBeVisible({ timeout: 10000 })
+
+    // Extract the QR url from the Open mobile signing page button or SVG
+    const openPhonePageBtn = respondentPage
+      .locator(
+        'button:has-text("Open mobile signing page"), button:has-text("開啟手機全螢幕手寫頁面")'
+      )
+      .first()
+    await expect(openPhonePageBtn).toBeVisible()
+
+    // 17c. Open mobile signing page in a separate phone context
+    const phoneContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
+    })
+    const phonePage = await phoneContext.newPage()
+
+    // Get the session URL from the QR SVG or construct it by capturing network call
+    // Let's get the sessionId from the DOM or network
+    let sessionId = ''
+    respondentPage.on('request', req => {
+      const match = req.url().match(/\/api\/signature-session\/([a-zA-Z0-9_-]+)/)
+      if (match) sessionId = match[1]
+    })
+    await respondentPage.waitForTimeout(1500)
+
+    // Open phone page
+    expect(sessionId).toBeTruthy()
+    await phonePage.goto(`${BASE_URL}/sign/${sessionId}`)
+    await phonePage.waitForLoadState('networkidle')
+
+    // Draw on phone canvas
+    const phoneCanvas = phonePage.locator('#signature-canvas')
+    await expect(phoneCanvas).toBeVisible({ timeout: 10000 })
+    const box = await phoneCanvas.boundingBox()
+    expect(box).toBeTruthy()
+    await phonePage.mouse.move(box!.x + 40, box!.y + 80)
+    await phonePage.mouse.down()
+    for (let i = 1; i <= 6; i++) {
+      await phonePage.mouse.move(box!.x + 40 + i * 25, box!.y + 80 + (i % 2 === 0 ? 15 : -15))
+      await phonePage.waitForTimeout(30)
+    }
+    await phonePage.mouse.up()
+    await phonePage.waitForTimeout(300)
+
+    // Click Confirm & Sync on phone
+    await phonePage.click('#submit-btn')
+    await expect(phonePage.locator('#success-overlay')).toBeVisible({ timeout: 10000 })
+    await phoneContext.close()
+
+    // 17d. Verify desktop form detects sync and closes QR modal
+    await expect(
+      respondentPage
+        .locator('text=Signature synced!')
+        .or(respondentPage.locator('text=簽名已同步！'))
+        .first()
+    ).toBeVisible({ timeout: 10000 })
+
+    // Wait for QR modal to auto-close
+    await expect(
+      respondentPage
+        .locator('text=Scan to Sign on Phone')
+        .or(respondentPage.locator('text=手機掃碼簽名'))
+        .first()
+    ).not.toBeVisible({ timeout: 10000 })
+
+    // Submit form on desktop
+    const submitBtn = respondentPage.locator('.heyform-body-active button:has-text("Submit")')
+    await expect(submitBtn).toBeVisible()
+    await submitBtn.click()
+
+    await expect(respondentPage.locator('text=Thank you!')).toBeVisible({ timeout: 15000 })
+    await respondentContext.close()
+  })
 })

@@ -542,34 +542,41 @@ export const SignaturePad: FC<SignaturePadProps> = ({
             // without stretching or changing its aspect ratio
             const phoneW = data.canvasWidth || 0
             const phoneH = data.canvasHeight || 0
-            const deskW = canvasRef.offsetWidth
-            const deskH = canvasRef.offsetHeight
 
             const img = new Image()
             img.crossOrigin = 'anonymous'
             img.onload = () => {
-              signaturePad?.clear()
-              const ctx = canvasRef.getContext('2d')
-              if (ctx) {
-                let scale = 1
-                if (phoneW > 0 && phoneH > 0) {
-                  scale = Math.min(deskW / phoneW, deskH / phoneH)
-                } else {
-                  scale = Math.min(deskW / img.naturalWidth, deskH / img.naturalHeight)
-                }
-                const drawW = (phoneW > 0 ? phoneW : img.naturalWidth) * scale
-                const drawH = (phoneH > 0 ? phoneH : img.naturalHeight) * scale
-                const offsetX = (deskW - drawW) / 2
-                const offsetY = (deskH - drawH) / 2
+              const dpr = Math.max(window.devicePixelRatio || 1, 1)
+              const destW = (canvasRef.offsetWidth || 400) * dpr
+              const destH = (canvasRef.offsetHeight || 200) * dpr
 
-                ctx.clearRect(0, 0, deskW, deskH)
-                ctx.drawImage(img, offsetX, offsetY, drawW, drawH)
-                const dataUrl = canvasRef.toDataURL('image/png')
-                signingMethodRef.current = 'phone_sync'
-                if (!startedAtRef.current) startedAtRef.current = Date.now()
-                strokeCountRef.current = Math.max(strokeCountRef.current, 1)
-                exportSignature(dataUrl, 'phone_sync')
-              }
+              const offscreen = document.createElement('canvas')
+              offscreen.width = destW
+              offscreen.height = destH
+              const offCtx = offscreen.getContext('2d')
+              if (!offCtx) return
+
+              const pW = phoneW > 0 ? phoneW : img.naturalWidth
+              const pH = phoneH > 0 ? phoneH : img.naturalHeight
+              const scale = Math.min((destW * 0.9) / pW, (destH * 0.9) / pH)
+              const drawW = pW * scale
+              const drawH = pH * scale
+              const offsetX = (destW - drawW) / 2
+              const offsetY = (destH - drawH) / 2
+
+              offCtx.clearRect(0, 0, destW, destH)
+              offCtx.drawImage(img, offsetX, offsetY, drawW, drawH)
+              const finalDataUrl = offscreen.toDataURL('image/png')
+
+              signingMethodRef.current = 'phone_sync'
+              if (!startedAtRef.current) startedAtRef.current = Date.now()
+              strokeCountRef.current = Math.max(strokeCountRef.current, 1)
+              pointCountRef.current = Math.max(pointCountRef.current, 20)
+
+              lastExportedValueRef.current = finalDataUrl
+              signaturePad?.clear()
+              signaturePad?.fromDataURL(finalDataUrl)
+              exportSignature(finalDataUrl, 'phone_sync')
             }
             img.src = data.signature
 
@@ -700,10 +707,10 @@ export const SignaturePad: FC<SignaturePadProps> = ({
         <span className="text-secondary text-xs">{t('Draw your signature above')}</span>
 
         <div className="flex items-center gap-1.5">
-          {/* Trackpad Mode Button - Desktop/laptop only */}
+          {/* Trackpad Mode Button */}
           <button
             type="button"
-            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary hidden items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all sm:inline-flex"
+            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all"
             onClick={handleStartTrackpad}
             title={t(
               'Trackpad Mode - Full surface direct finger writing with pressure sensitivity'
@@ -713,10 +720,10 @@ export const SignaturePad: FC<SignaturePadProps> = ({
             <span>{t('Trackpad Mode')}</span>
           </button>
 
-          {/* Sign on Phone QR Code Button - Desktop only */}
+          {/* Sign on Phone QR Code Button */}
           <button
             type="button"
-            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary hidden items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all sm:inline-flex"
+            className="border-accent-light bg-foreground/60 text-primary hover:bg-accent-light hover:text-primary inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm transition-all"
             onClick={handleOpenQrModal}
             title={t('Scan with phone camera to sign on touch screen')}
           >
@@ -812,17 +819,26 @@ export const SignaturePad: FC<SignaturePadProps> = ({
               )}
             </div>
 
-            {/* Link Copy fallback */}
-            <div className="border-accent-light mt-4 border-t pt-3">
+            {/* Action Buttons: Direct open & Copy link */}
+            <div className="border-accent-light mt-4 flex flex-col gap-2 border-t pt-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow transition-colors hover:bg-emerald-500"
+                onClick={() => window.open(qrUrl, '_blank')}
+              >
+                <IconDeviceMobile className="h-4 w-4" />
+                <span>{t('Open mobile signing page')}</span>
+              </button>
+
               <button
                 type="button"
                 className="text-secondary hover:text-primary text-xs underline transition-colors"
                 onClick={() => {
                   navigator.clipboard.writeText(qrUrl)
-                  alert('Signing link copied to clipboard!')
+                  alert(t('Signing link copied to clipboard!'))
                 }}
               >
-                Copy signing link
+                {t('Copy signing link')}
               </button>
             </div>
           </div>
