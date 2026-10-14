@@ -438,15 +438,32 @@ export function generateOpenApiSpec(origin: string) {
     },
     components: {
       securitySchemes: {
+        oauth2: {
+          type: 'oauth2',
+          description: 'HeyForm OAuth 2.0 authentication',
+          flows: {
+            authorizationCode: {
+              authorizationUrl: `${origin}/oauth/authorize`,
+              tokenUrl: `${origin}/oauth/token`,
+              scopes: {
+                read: 'Read workspaces, projects, forms, and submissions',
+                write: 'Create and edit forms, add fields, publish forms'
+              }
+            }
+          }
+        },
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter your session token obtained from /api/action/login'
+          description: 'Bearer token obtained from OAuth 2.0 or /api/action/login'
         }
       }
     },
     security: [
+      {
+        oauth2: ['read', 'write']
+      },
       {
         bearerAuth: []
       }

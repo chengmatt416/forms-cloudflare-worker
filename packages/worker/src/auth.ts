@@ -142,3 +142,65 @@ export function parseCookies(cookieHeader: string | null): Record<string, string
   }
   return cookies
 }
+
+export interface OAuthCodePayload {
+  userId: string
+  clientId: string
+  redirectUri: string
+  expiresAt: number
+  scope?: string
+}
+
+export async function createOAuthCode(payload: OAuthCodePayload, secret: string): Promise<string> {
+  const payloadStr = JSON.stringify(payload)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(payloadStr)
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+
+  const signature = await crypto.subtle.sign('HMAC', key, data)
+  const encodedPayload = btoa(payloadStr)
+  const encodedSig = bufferToHex(signature)
+
+  return `code_${encodedPayload}.${encodedSig}`
+}
+
+export async function verifyOAuthCode(
+  code: string,
+  secret: string
+): Promise<OAuthCodePayload | null> {
+  try {
+    if (!code || !code.startsWith('code_')) return null
+    const raw = code.slice(5)
+    const [encodedPayload, sigHex] = raw.split('.')
+    if (!encodedPayload || !sigHex) return null
+
+    const payloadStr = atob(encodedPayload)
+    const encoder = new TextEncoder()
+    const data = encoder.encode(payloadStr)
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    )
+
+    const isValid = await crypto.subtle.verify('HMAC', key, hexToBuffer(sigHex), data)
+    if (!isValid) return null
+
+    const payload: OAuthCodePayload = JSON.parse(payloadStr)
+    if (payload.expiresAt < Date.now()) return null
+
+    return payload
+  } catch {
+    return null
+  }
+}

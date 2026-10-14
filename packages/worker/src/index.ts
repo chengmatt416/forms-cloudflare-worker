@@ -6,6 +6,8 @@ import { schema } from './graphql/schema'
 import { graphql } from 'graphql'
 
 import { createSessionToken, parseCookies, verifyPassword, verifySessionToken } from './auth'
+import { registerMcpRoutes } from './mcp'
+import { registerOAuthRoutes } from './oauth'
 import { generateOpenApiSpec } from './openapi'
 import { Env, FormRow, Project, SubmissionRow, Team, User } from './types'
 
@@ -30,6 +32,10 @@ app.get('/health', c => {
 app.get('/api/health', c => {
   return c.json({ status: 'ok', engine: 'cloudflare-worker', timestamp: Date.now() })
 })
+
+// Register OAuth 2.0 & Native MCP Routes
+registerOAuthRoutes(app)
+registerMcpRoutes(app)
 
 // Helper to authenticate request via Cookie or Authorization: Bearer
 async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
