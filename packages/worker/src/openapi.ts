@@ -1,10 +1,18 @@
 export function generateOpenApiSpec(origin: string) {
+  const sessionParam = {
+    name: 'sessionId',
+    in: 'query',
+    required: false,
+    schema: { type: 'string' },
+    description: 'Active session ID. If omitted, and not logged in, response provides a login link.'
+  }
+
   return {
     openapi: '3.1.0',
     info: {
-      title: 'HeyForm Actions API',
+      title: 'HeyForm Assistant API',
       description:
-        'API for ChatGPT to interact with HeyForm to manage workspaces, projects, forms, questions, and responses.',
+        'Zero-configuration API for ChatGPT to manage HeyForm forms, workspaces, questions, and submissions. Directs user to a simple browser login page without requiring any OAuth client IDs or secrets.',
       version: '1.0.0'
     },
     servers: [
@@ -14,57 +22,75 @@ export function generateOpenApiSpec(origin: string) {
       }
     ],
     paths: {
-      '/api/action/login': {
-        post: {
-          operationId: 'login',
-          summary: 'Log in to HeyForm',
-          description: 'Authenticate with email and password to receive a session token.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['email', 'password'],
-                  properties: {
-                    email: {
-                      type: 'string',
-                      format: 'email',
-                      description: 'User email address'
-                    },
-                    password: {
-                      type: 'string',
-                      description: 'User password'
-                    }
-                  }
-                }
-              }
-            }
-          },
+      '/api/action/auth/login-url': {
+        get: {
+          operationId: 'getLoginUrl',
+          summary: 'Get OAuth Login URL',
+          description:
+            'Generates a secure browser login link for the user. Call this whenever you need to prompt the user to log in.',
           responses: {
             '200': {
-              description: 'Successful login',
+              description: 'Login link and sessionId',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
-                      token: { type: 'string', description: 'Session Bearer Token' },
-                      user: {
-                        type: 'object',
-                        properties: {
-                          id: { type: 'string' },
-                          email: { type: 'string' },
-                          name: { type: 'string' }
-                        }
-                      }
+                      sessionId: {
+                        type: 'string',
+                        description: 'Session identifier to use after user logs in'
+                      },
+                      loginUrl: {
+                        type: 'string',
+                        description: 'Browser link for the user to authenticate'
+                      },
+                      message: { type: 'string' }
                     }
                   }
                 }
               }
-            },
-            '401': { description: 'Invalid credentials' }
+            }
+          }
+        }
+      },
+      '/api/action/auth/status': {
+        get: {
+          operationId: 'checkLoginStatus',
+          summary: 'Check if user is logged in',
+          description: 'Verify if the user has completed login in their browser.',
+          parameters: [
+            {
+              name: 'sessionId',
+              in: 'query',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Session ID from getLoginUrl'
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Authentication status',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      authenticated: { type: 'boolean' },
+                      sessionId: { type: 'string' },
+                      user: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          name: { type: 'string' },
+                          email: { type: 'string' }
+                        }
+                      },
+                      loginUrl: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -73,6 +99,7 @@ export function generateOpenApiSpec(origin: string) {
           operationId: 'listWorkspaces',
           summary: 'List workspaces (teams)',
           description: 'Get all workspaces that the user belongs to.',
+          parameters: [sessionParam],
           responses: {
             '200': {
               description: 'List of workspaces',
@@ -101,6 +128,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'List projects in a workspace',
           description: 'Get all projects within a specified workspace.',
           parameters: [
+            sessionParam,
             {
               name: 'teamId',
               in: 'query',
@@ -137,6 +165,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'List forms in a project',
           description: 'Get all forms in a project.',
           parameters: [
+            sessionParam,
             {
               name: 'projectId',
               in: 'query',
@@ -171,7 +200,8 @@ export function generateOpenApiSpec(origin: string) {
         post: {
           operationId: 'createForm',
           summary: 'Create a new form',
-          description: 'Create a new empty or template form in a project.',
+          description: 'Create a new empty form in a project.',
+          parameters: [sessionParam],
           requestBody: {
             required: true,
             content: {
@@ -180,6 +210,7 @@ export function generateOpenApiSpec(origin: string) {
                   type: 'object',
                   required: ['projectId', 'name'],
                   properties: {
+                    sessionId: { type: 'string', description: 'Session ID' },
                     projectId: { type: 'string', description: 'Project ID to create form in' },
                     name: { type: 'string', description: 'Title of the new form' },
                     kind: {
@@ -222,6 +253,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'Get form details',
           description: 'Get questions, drafts, settings, and status of a form.',
           parameters: [
+            sessionParam,
             {
               name: 'formId',
               in: 'path',
@@ -261,6 +293,7 @@ export function generateOpenApiSpec(origin: string) {
           description:
             'Add a new question field to a form. Supports short_text, long_text, number, multiple_choice, rating, opinion_scale, yes_no, date, email, phone_number, etc.',
           parameters: [
+            sessionParam,
             {
               name: 'formId',
               in: 'path',
@@ -277,6 +310,7 @@ export function generateOpenApiSpec(origin: string) {
                   type: 'object',
                   required: ['kind', 'title'],
                   properties: {
+                    sessionId: { type: 'string', description: 'Session ID' },
                     kind: {
                       type: 'string',
                       description:
@@ -334,6 +368,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'Publish form',
           description: 'Publish latest draft changes so the form is live for respondents.',
           parameters: [
+            sessionParam,
             {
               name: 'formId',
               in: 'path',
@@ -366,6 +401,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'List form submissions',
           description: 'Get submissions/answers submitted to a form.',
           parameters: [
+            sessionParam,
             {
               name: 'formId',
               in: 'path',
@@ -408,6 +444,7 @@ export function generateOpenApiSpec(origin: string) {
           summary: 'Get form analytics',
           description: 'Get total visits, submission counts, and completion metrics.',
           parameters: [
+            sessionParam,
             {
               name: 'formId',
               in: 'path',
@@ -438,35 +475,14 @@ export function generateOpenApiSpec(origin: string) {
     },
     components: {
       securitySchemes: {
-        oauth2: {
-          type: 'oauth2',
-          description: 'HeyForm OAuth 2.0 authentication',
-          flows: {
-            authorizationCode: {
-              authorizationUrl: `${origin}/oauth/authorize`,
-              tokenUrl: `${origin}/oauth/token`,
-              scopes: {
-                read: 'Read workspaces, projects, forms, and submissions',
-                write: 'Create and edit forms, add fields, publish forms'
-              }
-            }
-          }
-        },
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Bearer token obtained from OAuth 2.0 or /api/action/login'
+          description: 'Optional Bearer token'
         }
       }
     },
-    security: [
-      {
-        oauth2: ['read', 'write']
-      },
-      {
-        bearerAuth: []
-      }
-    ]
+    security: []
   }
 }

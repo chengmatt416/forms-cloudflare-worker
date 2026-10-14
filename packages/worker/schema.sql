@@ -107,5 +107,13 @@ CREATE TABLE IF NOT EXISTS team_invitations (
   UNIQUE(team_id, email)
 );
 
-CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON team_invitations(email);
-CREATE INDEX IF NOT EXISTS idx_team_invitations_team ON team_invitations(team_id);
+CREATE TABLE IF NOT EXISTS connected_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  authorized_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_connected_sessions_status ON connected_sessions(status);
+

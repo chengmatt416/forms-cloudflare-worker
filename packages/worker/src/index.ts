@@ -37,8 +37,8 @@ app.get('/api/health', c => {
 registerOAuthRoutes(app)
 registerMcpRoutes(app)
 
-// Helper to authenticate request via Cookie or Authorization: Bearer
-async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+// Helper to authenticate request via Cookie, Authorization: Bearer, or connected Session ID
+async function getAuthUser(c: Context<{ Bindings: Env }>, body?: any): Promise<User | null> {
   const cookieHeader = c.req.header('Cookie') || null
   const cookies = parseCookies(cookieHeader)
   let sessionToken = cookies['HEYFORM_SESSION']
@@ -52,12 +52,57 @@ async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<User | null> 
   if (sessionToken) {
     const verified = await verifySessionToken(sessionToken, c.env.SESSION_SECRET)
     if (verified?.userId) {
-      return await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
         .bind(verified.userId)
         .first<User>()
+      if (user) return user
     }
   }
+
+  // Check connected session ID (from query, header, or request body)
+  const sessionId =
+    c.req.query('sessionId') ||
+    c.req.query('session_id') ||
+    c.req.header('X-Session-Id') ||
+    body?.sessionId ||
+    body?.session_id
+
+  if (sessionId) {
+    const conn = await c.env.DB.prepare(
+      "SELECT user_id FROM connected_sessions WHERE id = ? AND status = 'authorized'"
+    )
+      .bind(sessionId)
+      .first<{ user_id: string }>()
+
+    if (conn?.user_id) {
+      return (await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
+        .bind(conn.user_id)
+        .first()) as User | null
+    }
+  }
+
   return null
+}
+
+async function requireAuth(c: Context<{ Bindings: Env }>, user: User | null) {
+  if (user) return null
+  const origin = new URL(c.req.url).origin
+  const sessionId = 'hf_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+  const now = Date.now()
+
+  await c.env.DB.prepare(
+    "INSERT INTO connected_sessions (id, status, created_at) VALUES (?, 'pending', ?)"
+  )
+    .bind(sessionId, now)
+    .run()
+
+  const loginUrl = `${origin}/connect?session=${sessionId}`
+  return c.json({
+    authenticated: false,
+    sessionId,
+    loginUrl,
+    message: `You are not logged in. Please click this link to log in to HeyForm: [Log in with HeyForm](${loginUrl})`
+  })
 }
 
 // ----------------- OpenAPI Specification -----------------
@@ -104,12 +149,13 @@ app.post('/api/action/login', async c => {
 // Workspaces Action
 app.get('/api/action/workspaces', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const teams = await c.env.DB.prepare(
     'SELECT t.*, tm.role FROM teams t JOIN team_members tm ON t.id = tm.team_id WHERE tm.user_id = ?'
   )
-    .bind(user.id)
+    .bind(user!.id)
     .all<Team & { role: string }>()
 
   return c.json(teams.results || [])
@@ -118,7 +164,8 @@ app.get('/api/action/workspaces', async c => {
 // Projects Action
 app.get('/api/action/projects', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const teamId = c.req.query('teamId')
   let query = 'SELECT * FROM projects'
@@ -137,7 +184,8 @@ app.get('/api/action/projects', async c => {
 // Forms Action (list)
 app.get('/api/action/forms', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const projectId = c.req.query('projectId')
   if (!projectId) {
@@ -164,10 +212,11 @@ app.get('/api/action/forms', async c => {
 
 // Create Form Action
 app.post('/api/action/forms', async c => {
-  const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-
   const body = await c.req.json().catch(() => ({}))
+  const user = await getAuthUser(c, body)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
+
   const projectId = body.projectId
   const name = body.name || 'Untitled'
   if (!projectId) {
@@ -206,7 +255,7 @@ app.post('/api/action/forms', async c => {
       formId,
       project.team_id,
       projectId,
-      user.id,
+      user!.id,
       name,
       JSON.stringify([]),
       JSON.stringify(defaultFields),
@@ -251,8 +300,10 @@ app.get('/api/action/forms/:formId', async c => {
 
 // Add Question Field Action
 app.post('/api/action/forms/:formId/fields', async c => {
-  const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const body = await c.req.json().catch(() => ({}))
+  const user = await getAuthUser(c, body)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const formId = c.req.param('formId')
   const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
@@ -260,7 +311,6 @@ app.post('/api/action/forms/:formId/fields', async c => {
     .first<FormRow>()
   if (!form) return c.json({ error: 'Form not found' }, 404)
 
-  const body = await c.req.json().catch(() => ({}))
   const kind = body.kind || 'short_text'
   const title = body.title || 'Question'
   const description = body.description
@@ -322,7 +372,8 @@ app.post('/api/action/forms/:formId/fields', async c => {
 // Publish Form Action
 app.post('/api/action/forms/:formId/publish', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const formId = c.req.param('formId')
   const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
@@ -351,7 +402,8 @@ app.post('/api/action/forms/:formId/publish', async c => {
 // Submissions Action
 app.get('/api/action/forms/:formId/submissions', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const formId = c.req.param('formId')
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '30', 10)))
@@ -384,7 +436,8 @@ app.get('/api/action/forms/:formId/submissions', async c => {
 // Analytics Action
 app.get('/api/action/forms/:formId/analytics', async c => {
   const user = await getAuthUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const unauth = await requireAuth(c, user)
+  if (unauth) return unauth
 
   const formId = c.req.param('formId')
   const countRow = await c.env.DB.prepare(
