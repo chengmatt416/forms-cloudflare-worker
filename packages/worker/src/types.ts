@@ -13,6 +13,7 @@ export interface User {
   password_hash: string
   avatar?: string
   role: string
+  language?: string
   created_at: number
 }
 

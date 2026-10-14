@@ -3,6 +3,7 @@ packages:
   - 'packages/webapp'
   - 'packages/form-renderer'
   - 'packages/worker'
+  - 'packages/mcp'
 allowBuilds:
   '@apollo/protobufjs': set this to true or false
   '@nestjs/core': set this to true or false

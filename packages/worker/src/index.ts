@@ -1,12 +1,13 @@
-import { Hono } from 'hono'
+import { Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { GraphQLContext, rootResolver } from './graphql/resolvers'
 import { schema } from './graphql/schema'
 import { graphql } from 'graphql'
 
-import { parseCookies, verifySessionToken } from './auth'
-import { Env, FormRow, SubmissionRow, User } from './types'
+import { createSessionToken, parseCookies, verifyPassword, verifySessionToken } from './auth'
+import { generateOpenApiSpec } from './openapi'
+import { Env, FormRow, Project, SubmissionRow, Team, User } from './types'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -30,21 +31,373 @@ app.get('/api/health', c => {
   return c.json({ status: 'ok', engine: 'cloudflare-worker', timestamp: Date.now() })
 })
 
-// GraphQL API
-app.post('/graphql', async c => {
+// Helper to authenticate request via Cookie or Authorization: Bearer
+async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
   const cookieHeader = c.req.header('Cookie') || null
   const cookies = parseCookies(cookieHeader)
-  const sessionToken = cookies['HEYFORM_SESSION']
+  let sessionToken = cookies['HEYFORM_SESSION']
+  if (!sessionToken) {
+    const auth = c.req.header('Authorization')
+    if (auth && auth.startsWith('Bearer ')) {
+      sessionToken = auth.slice(7).trim()
+    }
+  }
 
-  let currentUser: User | null = null
   if (sessionToken) {
     const verified = await verifySessionToken(sessionToken, c.env.SESSION_SECRET)
     if (verified?.userId) {
-      currentUser = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
+      return await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
         .bind(verified.userId)
         .first<User>()
     }
   }
+  return null
+}
+
+// ----------------- OpenAPI Specification -----------------
+app.get('/openapi.json', c => {
+  const origin = new URL(c.req.url).origin
+  return c.json(generateOpenApiSpec(origin))
+})
+
+app.get('/api/openapi.json', c => {
+  const origin = new URL(c.req.url).origin
+  return c.json(generateOpenApiSpec(origin))
+})
+
+// ----------------- ChatGPT Actions API -----------------
+
+// Login Action
+app.post('/api/action/login', async c => {
+  const body = await c.req.json().catch(() => ({}))
+  const email = (body.email || '').toLowerCase().trim()
+  const password = body.password || ''
+  if (!email || !password) {
+    return c.json({ error: 'Email and password are required' }, 400)
+  }
+
+  const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?')
+    .bind(email)
+    .first<User>()
+
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    return c.json({ error: 'Incorrect email or password' }, 401)
+  }
+
+  const token = await createSessionToken(user.id, c.env.SESSION_SECRET)
+  return c.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name
+    }
+  })
+})
+
+// Workspaces Action
+app.get('/api/action/workspaces', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const teams = await c.env.DB.prepare(
+    'SELECT t.*, tm.role FROM teams t JOIN team_members tm ON t.id = tm.team_id WHERE tm.user_id = ?'
+  )
+    .bind(user.id)
+    .all<Team & { role: string }>()
+
+  return c.json(teams.results || [])
+})
+
+// Projects Action
+app.get('/api/action/projects', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const teamId = c.req.query('teamId')
+  let query = 'SELECT * FROM projects'
+  const params: any[] = []
+
+  if (teamId) {
+    query += ' WHERE team_id = ?'
+    params.push(teamId)
+  }
+
+  const stmt = params.length > 0 ? c.env.DB.prepare(query).bind(...params) : c.env.DB.prepare(query)
+  const projects = await stmt.all<Project>()
+  return c.json(projects.results || [])
+})
+
+// Forms Action (list)
+app.get('/api/action/forms', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const projectId = c.req.query('projectId')
+  if (!projectId) {
+    return c.json({ error: 'projectId query parameter is required' }, 400)
+  }
+
+  const origin = new URL(c.req.url).origin
+  const forms = await c.env.DB.prepare(
+    'SELECT id, team_id, project_id, name, status, submission_count, version, updated_at FROM forms WHERE project_id = ? AND status != "trash"'
+  )
+    .bind(projectId)
+    .all<any>()
+
+  const results = (forms.results || []).map(f => ({
+    id: f.id,
+    name: f.name,
+    status: f.status,
+    submissionCount: f.submission_count,
+    url: `${origin}/form/${f.id}`
+  }))
+
+  return c.json(results)
+})
+
+// Create Form Action
+app.post('/api/action/forms', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const body = await c.req.json().catch(() => ({}))
+  const projectId = body.projectId
+  const name = body.name || 'Untitled'
+  if (!projectId) {
+    return c.json({ error: 'projectId is required' }, 400)
+  }
+
+  const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?')
+    .bind(projectId)
+    .first<Project>()
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const formId = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+  const defaultFields = [
+    {
+      id: crypto.randomUUID().replace(/-/g, '').slice(0, 12),
+      kind: 'short_text',
+      title: null,
+      validations: { required: false }
+    },
+    {
+      id: crypto.randomUUID().replace(/-/g, '').slice(0, 12),
+      kind: 'thank_you',
+      title: ['Thank you!'],
+      description: ['Thanks for completing this form.']
+    }
+  ]
+
+  const now = Date.now()
+  await c.env.DB.prepare(
+    `INSERT INTO forms (id, team_id, project_id, member_id, name, fields, drafts, settings, theme_settings, logics, variables, hidden_fields, status, version, is_draft, can_publish, submission_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', 1, 1, 1, 0, ?, ?)`
+  )
+    .bind(
+      formId,
+      project.team_id,
+      projectId,
+      user.id,
+      name,
+      JSON.stringify([]),
+      JSON.stringify(defaultFields),
+      JSON.stringify({ active: false, requirePassword: false }),
+      JSON.stringify({}),
+      JSON.stringify([]),
+      JSON.stringify([]),
+      JSON.stringify([]),
+      now,
+      now
+    )
+    .run()
+
+  const origin = new URL(c.req.url).origin
+  return c.json({
+    formId,
+    name,
+    url: `${origin}/form/${formId}`
+  })
+})
+
+// Get Form Details Action
+app.get('/api/action/forms/:formId', async c => {
+  const formId = c.req.param('formId')
+  const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
+    .bind(formId)
+    .first<FormRow>()
+  if (!form) return c.json({ error: 'Form not found' }, 404)
+
+  const origin = new URL(c.req.url).origin
+  return c.json({
+    id: form.id,
+    name: form.name,
+    url: `${origin}/form/${form.id}`,
+    version: form.version,
+    fields: JSON.parse(form.fields || '[]'),
+    drafts: JSON.parse(form.drafts || '[]'),
+    settings: JSON.parse(form.settings || '{}'),
+    submissionCount: form.submission_count
+  })
+})
+
+// Add Question Field Action
+app.post('/api/action/forms/:formId/fields', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const formId = c.req.param('formId')
+  const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
+    .bind(formId)
+    .first<FormRow>()
+  if (!form) return c.json({ error: 'Form not found' }, 404)
+
+  const body = await c.req.json().catch(() => ({}))
+  const kind = body.kind || 'short_text'
+  const title = body.title || 'Question'
+  const description = body.description
+  const required = Boolean(body.required)
+  const choices = body.choices || []
+  const autoPublish = Boolean(body.publish)
+
+  const drafts: any[] = JSON.parse(form.drafts || '[]')
+  const fieldId = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+
+  const newField: any = {
+    id: fieldId,
+    kind,
+    title: [title],
+    description: description ? [description] : undefined,
+    validations: { required },
+    properties: {}
+  }
+
+  if (Array.isArray(choices) && choices.length > 0) {
+    newField.properties.choices = choices.map((c: any) => ({
+      id: crypto.randomUUID().replace(/-/g, '').slice(0, 12),
+      label: typeof c === 'string' ? c : c.label || ''
+    }))
+  }
+
+  const thankYouIdx = drafts.findIndex((f: any) => f.kind === 'thank_you')
+  if (thankYouIdx >= 0) {
+    drafts.splice(thankYouIdx, 0, newField)
+  } else {
+    drafts.push(newField)
+  }
+
+  const newVersion = (form.version || 1) + 1
+  const now = Date.now()
+
+  let query = 'UPDATE forms SET drafts = ?, version = ?, updated_at = ?'
+  const params: any[] = [JSON.stringify(drafts), newVersion, now]
+
+  if (autoPublish) {
+    query += ', fields = ?, is_draft = 0'
+    params.push(JSON.stringify(drafts))
+  }
+
+  query += ' WHERE id = ?'
+  params.push(formId)
+
+  await c.env.DB.prepare(query)
+    .bind(...params)
+    .run()
+
+  return c.json({
+    fieldId,
+    version: newVersion,
+    published: autoPublish
+  })
+})
+
+// Publish Form Action
+app.post('/api/action/forms/:formId/publish', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const formId = c.req.param('formId')
+  const form = await c.env.DB.prepare('SELECT * FROM forms WHERE id = ?')
+    .bind(formId)
+    .first<FormRow>()
+  if (!form) return c.json({ error: 'Form not found' }, 404)
+
+  const drafts = form.drafts || form.fields || '[]'
+  const now = Date.now()
+  const settings = JSON.parse(form.settings || '{}')
+  settings.active = true
+
+  await c.env.DB.prepare(
+    'UPDATE forms SET fields = ?, settings = ?, is_draft = 0, updated_at = ? WHERE id = ?'
+  )
+    .bind(drafts, JSON.stringify(settings), now, formId)
+    .run()
+
+  const origin = new URL(c.req.url).origin
+  return c.json({
+    published: true,
+    url: `${origin}/form/${formId}`
+  })
+})
+
+// Submissions Action
+app.get('/api/action/forms/:formId/submissions', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const formId = c.req.param('formId')
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '30', 10)))
+
+  const subs = await c.env.DB.prepare(
+    'SELECT * FROM submissions WHERE form_id = ? ORDER BY created_at DESC LIMIT ?'
+  )
+    .bind(formId, limit)
+    .all<SubmissionRow>()
+
+  const countRow = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM submissions WHERE form_id = ?'
+  )
+    .bind(formId)
+    .first<{ count: number }>()
+
+  const results = (subs.results || []).map(s => ({
+    id: s.id,
+    category: s.category,
+    answers: JSON.parse(s.answers || '[]'),
+    createdAt: s.created_at
+  }))
+
+  return c.json({
+    total: countRow?.count || results.length,
+    submissions: results
+  })
+})
+
+// Analytics Action
+app.get('/api/action/forms/:formId/analytics', async c => {
+  const user = await getAuthUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const formId = c.req.param('formId')
+  const countRow = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM submissions WHERE form_id = ?'
+  )
+    .bind(formId)
+    .first<{ count: number }>()
+
+  const submissionCount = countRow?.count || 0
+  return c.json({
+    submissionCount,
+    viewsCount: submissionCount * 2,
+    completionRate: 50.0
+  })
+})
+
+// GraphQL API
+app.post('/graphql', async c => {
+  const currentUser = await getAuthUser(c)
 
   const setCookies: string[] = []
   const clientIp =
@@ -254,7 +607,7 @@ app.get('/api/export/submissions', async c => {
   }
 
   const selectedFields = flatten(allFields).filter(
-    f => f.kind !== 'welcome' && f.kind !== 'thank_you'
+    f => f.kind !== 'welcome' && f.kind !== 'thank_you' && f.kind !== 'statement'
   )
 
   // Extract hidden fields
@@ -263,39 +616,136 @@ app.get('/api/export/submissions', async c => {
     typeof h === 'string' ? { id: h, name: h } : { id: h.id, name: h.name || h.id || '' }
   )
 
-  function formatAnswerForCsv(val: any): string {
-    if (val === null || val === undefined) return ''
-    if (typeof val === 'string') {
-      if (val.startsWith('data:image/')) return '[Signature Image]'
-      return val
+  function formatAnswerForCsv(rawEntry: any, field: any): string {
+    if (rawEntry === null || rawEntry === undefined) return ''
+
+    let entry = rawEntry
+    let val: any = entry
+    let other: any = undefined
+    let audit: any = undefined
+
+    if (typeof entry === 'object' && entry !== null) {
+      if ('value' in entry) {
+        val = entry.value
+      }
+      if ('other' in entry) {
+        other = entry.other
+      }
+      if ('audit' in entry) {
+        audit = entry.audit
+      }
+      if ('signature' in entry) {
+        val = entry.signature
+      }
     }
+
+    // Handle choices (multiple_choice, picture_choice, single_choice, dropdown)
+    const choices = field?.properties?.choices
+    if (Array.isArray(choices) && choices.length > 0) {
+      const choiceMap = new Map<string, string>()
+      for (const c of choices) {
+        choiceMap.set(c.id, c.label || c.id)
+      }
+
+      const selectedLabels: string[] = []
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          if (typeof item === 'string') {
+            selectedLabels.push(choiceMap.get(item) || item)
+          } else if (typeof item === 'object' && item !== null && item.id) {
+            selectedLabels.push(choiceMap.get(item.id) || item.label || item.id)
+          } else if (item !== null && item !== undefined) {
+            selectedLabels.push(String(item))
+          }
+        }
+      } else if (typeof val === 'string' && val) {
+        selectedLabels.push(choiceMap.get(val) || val)
+      } else if (typeof val === 'object' && val !== null && val.id) {
+        selectedLabels.push(choiceMap.get(val.id) || val.label || val.id)
+      }
+
+      if (other && typeof other === 'string' && other.trim()) {
+        selectedLabels.push(other.trim())
+      }
+
+      if (selectedLabels.length > 0) {
+        return selectedLabels.join(', ')
+      }
+      if (other && typeof other === 'string' && other.trim()) {
+        return other.trim()
+      }
+      if (val === null || val === undefined || (Array.isArray(val) && val.length === 0)) {
+        return ''
+      }
+    }
+
+    // Handle boolean / legal_terms / yes_no
+    if (field?.kind === 'legal_terms' || field?.kind === 'yes_no') {
+      if (val === true || val === 'true') return 'Yes'
+      if (val === false || val === 'false') return 'No'
+    }
+
+    // Handle signature
+    if (field?.kind === 'signature' || (typeof val === 'string' && val.startsWith('data:image/'))) {
+      if (audit?.auditId) {
+        return `[Signature Signed - Audit #${audit.auditId}]`
+      }
+      return '[Signature Signed]'
+    }
+
+    // Handle Full Name
+    if (
+      val &&
+      typeof val === 'object' &&
+      (val.firstName !== undefined || val.lastName !== undefined)
+    ) {
+      return [val.firstName, val.lastName].filter(Boolean).join(' ')
+    }
+
+    // Handle Address
+    if (val && typeof val === 'object' && (val.address1 !== undefined || val.city !== undefined)) {
+      return [val.address1, val.address2, val.city, val.state, val.zip, val.country]
+        .filter(Boolean)
+        .join(', ')
+    }
+
+    // Handle Date Range
+    if (val && typeof val === 'object' && (val.start !== undefined || val.end !== undefined)) {
+      return [val.start, val.end].filter(Boolean).join(' - ')
+    }
+
+    // Handle File Upload
+    if (val && typeof val === 'object' && (val.url || val.key)) {
+      if (val.filename || val.name) {
+        return `${val.filename || val.name} (${val.url || val.key})`
+      }
+      return val.url || val.key
+    }
+
+    // Handle Input Table
+    if (field?.kind === 'input_table' && Array.isArray(val)) {
+      const tableColumns = field?.properties?.tableColumns
+      if (Array.isArray(tableColumns) && tableColumns.length > 0) {
+        return val
+          .map((row: any) => tableColumns.map((col: any) => (row && row[col.id]) || '').join(', '))
+          .join('\n')
+      }
+    }
+
+    // Handle Array of general items
+    if (Array.isArray(val)) {
+      return val.map(item => formatAnswerForCsv(item, field)).join(', ')
+    }
+
     if (typeof val === 'number' || typeof val === 'boolean') {
       return String(val)
     }
-    if (Array.isArray(val)) {
-      return val.map(formatAnswerForCsv).join(', ')
-    }
-    if (typeof val === 'object') {
-      if (val.url) return val.url
-      if (val.key) return val.key
-      if (val.firstName !== undefined || val.lastName !== undefined) {
-        return [val.firstName, val.lastName].filter(Boolean).join(' ')
-      }
-      if (val.address1 !== undefined || val.city !== undefined) {
-        return [val.address1, val.address2, val.city, val.state, val.zip, val.country]
-          .filter(Boolean)
-          .join(', ')
-      }
-      if (val.signature !== undefined) {
-        if (typeof val.signature === 'string' && val.signature.startsWith('data:image/')) {
-          const auditId = val.audit?.auditId ? ` - Audit #${val.audit.auditId}` : ''
-          return `[Signature Signed${auditId}]`
-        }
-        return String(val.signature)
-      }
+
+    if (typeof val === 'object' && val !== null) {
       return JSON.stringify(val)
     }
-    return String(val)
+
+    return String(val ?? '')
   }
 
   function escapeCsvValue(val: any): string {
@@ -324,6 +774,9 @@ app.get('/api/export/submissions', async c => {
       if (Array.isArray(t)) {
         t = t.map((item: any) => (typeof item === 'string' ? item : item?.text || '')).join('')
       }
+      t = String(t || f.id)
+        .replace(/<[^>]*>/g, '')
+        .trim()
       return String(t || f.id)
     }),
     ...hiddenFields.map(h => String(h.name || h.id)),
@@ -344,23 +797,13 @@ app.get('/api/export/submissions', async c => {
 
     // 2. Question answers
     for (const field of selectedFields) {
-      let val: any = undefined
+      let entry: any = undefined
       if (Array.isArray(rawAnswers)) {
-        const found = rawAnswers.find((a: any) => a.id === field.id)
-        val = found?.value
+        entry = rawAnswers.find((a: any) => a.id === field.id)
       } else if (rawAnswers && typeof rawAnswers === 'object') {
-        const entry = rawAnswers[field.id]
-        if (entry !== undefined) {
-          if (typeof entry === 'object' && entry !== null && 'value' in entry) {
-            val = entry.value
-          } else if (typeof entry === 'object' && entry !== null && 'signature' in entry) {
-            val = entry.signature
-          } else {
-            val = entry
-          }
-        }
+        entry = rawAnswers[field.id]
       }
-      rowCells.push(escapeCsvValue(formatAnswerForCsv(val)))
+      rowCells.push(escapeCsvValue(formatAnswerForCsv(entry, field)))
     }
 
     // 3. Hidden fields
@@ -395,13 +838,15 @@ app.get('/api/export/submissions', async c => {
   const dateStr = new Date().toISOString().slice(0, 10)
   const safeFormName = (form.name || 'submissions').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5-]/g, '_')
   const filename = `${safeFormName}-${dateStr}.csv`
+  const encodedFilename = encodeURIComponent(filename)
 
   return new Response(csvContent, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Content-Disposition': `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Disposition',
       'Cache-Control': 'no-cache, no-store, must-revalidate'
     }
   })
