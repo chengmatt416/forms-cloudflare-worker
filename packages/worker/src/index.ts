@@ -116,6 +116,72 @@ app.get('/api/openapi.json', c => {
   return c.json(generateOpenApiSpec(origin))
 })
 
+app.get('/openapi.yaml', c => {
+  const origin = new URL(c.req.url).origin
+  return c.text(JSON.stringify(generateOpenApiSpec(origin), null, 2), 200, {
+    'Content-Type': 'text/yaml'
+  })
+})
+
+app.get('/.well-known/openapi.yaml', c => {
+  const origin = new URL(c.req.url).origin
+  return c.text(JSON.stringify(generateOpenApiSpec(origin), null, 2), 200, {
+    'Content-Type': 'text/yaml'
+  })
+})
+
+// ----------------- ChatGPT AI Plugin Manifest -----------------
+const getPluginManifest = (c: Context<{ Bindings: Env }>) => {
+  const origin = new URL(c.req.url).origin
+  const authMode = c.req.query('auth') || 'oauth'
+  const verificationToken =
+    c.req.query('token') ||
+    c.req.query('verification') ||
+    (c.env as any).OPENAI_VERIFICATION_TOKEN ||
+    'heyform_plugin_verification_token'
+
+  const authConfig =
+    authMode === 'none'
+      ? { type: 'none' }
+      : {
+          type: 'oauth',
+          client_url: `${origin}/oauth/authorize`,
+          scope: 'read write',
+          authorization_url: `${origin}/oauth/token`,
+          authorization_content_type: 'application/json',
+          verification_tokens: {
+            openai: verificationToken
+          }
+        }
+
+  return {
+    schema_version: 'v1',
+    name_for_human: 'HeyForm',
+    name_for_model: 'heyform',
+    description_for_human:
+      'Create forms, quizzes, and surveys, manage questions, and analyze responses.',
+    description_for_model:
+      'Plugin for creating and managing HeyForm forms, questions, fields, and submissions. Use listWorkspaces, listProjects, listForms, createForm, addField, and publishForm.',
+    auth: authConfig,
+    api: {
+      type: 'openapi',
+      url: `${origin}/openapi.json`,
+      is_user_authenticated: false
+    },
+    logo_url: `${origin}/static/favicon.svg`,
+    contact_email: 'support@heyform.net',
+    legal_info_url: `${origin}/privacy`
+  }
+}
+
+app.get('/.well-known/ai-plugin.json', c => c.json(getPluginManifest(c)))
+app.get('/ai-plugin.json', c => c.json(getPluginManifest(c)))
+
+app.get('/privacy', c =>
+  c.text('HeyForm Privacy Policy: Your data and form submissions are kept private and secure.')
+)
+app.get('/terms', c => c.text('HeyForm Terms of Service: HeyForm is an open-source form builder.'))
+
 // ----------------- ChatGPT Actions API -----------------
 
 // Login Action
