@@ -32,18 +32,80 @@ async function getAuthUserFromContext(c: Context<{ Bindings: Env }>): Promise<Us
   return null
 }
 
-function renderAuthHtml(opts: {
+async function sha256Base64Url(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  let binary = ''
+  for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function escapeHtml(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+interface AuthRequestParams {
   clientId: string
   redirectUri: string
   state: string
   scope: string
-  user: User | null
-  error?: string
-}): string {
+  codeChallenge: string
+  codeChallengeMethod: string
+  resource: string
+}
+
+function readAuthParams(
+  c: Context<{ Bindings: Env }>,
+  body: Record<string, any> = {}
+): AuthRequestParams {
+  const pick = (key: string) => ((body[key] as string) || c.req.query(key) || '').toString()
+  return {
+    clientId: pick('client_id') || 'chatgpt',
+    redirectUri: pick('redirect_uri'),
+    state: pick('state'),
+    scope: pick('scope') || 'read write',
+    codeChallenge: pick('code_challenge'),
+    codeChallengeMethod: pick('code_challenge_method') || (pick('code_challenge') ? 'plain' : ''),
+    resource: pick('resource')
+  }
+}
+
+function renderAuthHtml(
+  opts: AuthRequestParams & {
+    user: User | null
+    error?: string
+  }
+): string {
   const { clientId, redirectUri, state, scope, user, error } = opts
-  const clientDisplayName = clientId
-    ? clientId.charAt(0).toUpperCase() + clientId.slice(1)
-    : 'Application'
+  const rawDisplayName = clientId.startsWith('heyform_')
+    ? 'ChatGPT'
+    : clientId
+      ? clientId.charAt(0).toUpperCase() + clientId.slice(1)
+      : 'Application'
+  const clientDisplayName = escapeHtml(rawDisplayName)
+
+  const authQuery = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    state,
+    scope
+  })
+  if (opts.codeChallenge) {
+    authQuery.set('code_challenge', opts.codeChallenge)
+    authQuery.set('code_challenge_method', opts.codeChallengeMethod)
+  }
+  if (opts.resource) authQuery.set('resource', opts.resource)
+  const switchAccountHref = `/login?redirect=${encodeURIComponent(
+    `/oauth/authorize?${authQuery.toString()}`
+  )}`
+
+  const hidden = (name: string, value: string) =>
+    `<input type="hidden" name="${name}" value="${escapeHtml(value)}" />`
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -240,7 +302,7 @@ function renderAuthHtml(opts: {
       </p>
     </div>
 
-    ${error ? `<div class="error-banner">${error}</div>` : ''}
+    ${error ? `<div class="error-banner">${escapeHtml(error)}</div>` : ''}
 
     <div class="scope-box">
       <strong>Permissions requested:</strong>
@@ -252,27 +314,26 @@ function renderAuthHtml(opts: {
     </div>
 
     <form method="POST" action="/oauth/authorize">
-      <input type="hidden" name="client_id" value="${clientId || ''}" />
-      <input type="hidden" name="redirect_uri" value="${redirectUri || ''}" />
-      <input type="hidden" name="state" value="${state || ''}" />
-      <input type="hidden" name="scope" value="${scope || 'read write'}" />
+      ${hidden('client_id', clientId)}
+      ${hidden('redirect_uri', redirectUri)}
+      ${hidden('state', state)}
+      ${hidden('scope', scope || 'read write')}
+      ${hidden('code_challenge', opts.codeChallenge)}
+      ${hidden('code_challenge_method', opts.codeChallengeMethod)}
+      ${hidden('resource', opts.resource)}
 
       ${
         user
           ? `
         <div class="user-pill">
-          <div class="user-avatar">${(user.name || user.email || 'U').charAt(0).toUpperCase()}</div>
+          <div class="user-avatar">${escapeHtml((user.name || user.email || 'U').charAt(0).toUpperCase())}</div>
           <div class="user-info">
-            <div class="user-name">${user.name || 'User'}</div>
-            <div class="user-email">${user.email}</div>
+            <div class="user-name">${escapeHtml(user.name || 'User')}</div>
+            <div class="user-email">${escapeHtml(user.email)}</div>
           </div>
         </div>
         <button type="submit" name="action" value="authorize" class="btn">Authorize ${clientDisplayName}</button>
-        <a href="/login?redirect=${encodeURIComponent(
-          `/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-            redirectUri
-          )}&state=${state}&scope=${scope}`
-        )}" class="btn-secondary">Switch Account</a>
+        <a href="${escapeHtml(switchAccountHref)}" class="btn-secondary">Switch Account</a>
       `
           : `
         <div class="field">
@@ -299,27 +360,22 @@ function renderAuthHtml(opts: {
 export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
   // 1. Authorization Endpoint (GET)
   app.get('/oauth/authorize', async c => {
-    const clientId = c.req.query('client_id') || 'chatgpt'
-    const redirectUri = c.req.query('redirect_uri') || ''
-    const state = c.req.query('state') || ''
-    const scope = c.req.query('scope') || 'read write'
+    const params = readAuthParams(c)
 
-    if (!redirectUri) {
+    if (!params.redirectUri) {
       return c.text('Missing required query parameter: redirect_uri', 400)
     }
 
     const user = await getAuthUserFromContext(c)
-    const html = renderAuthHtml({ clientId, redirectUri, state, scope, user })
+    const html = renderAuthHtml({ ...params, user })
     return c.html(html)
   })
 
   // 2. Authorization Endpoint (POST - Approve)
   app.post('/oauth/authorize', async c => {
     const body: Record<string, any> = await c.req.parseBody().catch(() => ({}))
-    const clientId = (body['client_id'] as string) || c.req.query('client_id') || 'chatgpt'
-    const redirectUri = (body['redirect_uri'] as string) || c.req.query('redirect_uri') || ''
-    const state = (body['state'] as string) || c.req.query('state') || ''
-    const scope = (body['scope'] as string) || c.req.query('scope') || 'read write'
+    const params = readAuthParams(c, body)
+    const { clientId, redirectUri, state, scope } = params
 
     if (!redirectUri) {
       return c.text('Missing required parameter: redirect_uri', 400)
@@ -334,10 +390,7 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       if (!email || !password) {
         const html = renderAuthHtml({
-          clientId,
-          redirectUri,
-          state,
-          scope,
+          ...params,
           user: null,
           error: 'Please enter your email and password.'
         })
@@ -350,10 +403,7 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       if (!existingUser || !(await verifyPassword(password, existingUser.password_hash))) {
         const html = renderAuthHtml({
-          clientId,
-          redirectUri,
-          state,
-          scope,
+          ...params,
           user: null,
           error: 'Incorrect email or password.'
         })
@@ -363,56 +413,49 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
       user = existingUser
     }
 
-    // Generate OAuth Authorization Code (valid for 10 minutes)
+    // Generate OAuth Authorization Code (valid for 10 minutes), bound to PKCE challenge
     const code = await createOAuthCode(
       {
         userId: user.id,
         clientId,
         redirectUri,
         expiresAt: Date.now() + 10 * 60 * 1000,
-        scope
+        scope,
+        codeChallenge: params.codeChallenge || undefined,
+        codeChallengeMethod: params.codeChallenge ? params.codeChallengeMethod : undefined,
+        resource: params.resource || undefined
       },
       c.env.SESSION_SECRET
     )
 
     // Redirect back to client callback
-    const separator = redirectUri.includes('?') ? '&' : '?'
-    const targetUrl = `${redirectUri}${separator}code=${encodeURIComponent(code)}&state=${encodeURIComponent(
-      state
-    )}`
+    const target = new URL(redirectUri)
+    target.searchParams.set('code', code)
+    if (state) target.searchParams.set('state', state)
 
-    return c.redirect(targetUrl, 302)
+    return c.redirect(target.toString(), 302)
   })
 
   // 3. Token Endpoint (POST)
   app.post('/oauth/token', async c => {
-    let grantType = ''
-    let code = ''
-    let redirectUri = ''
-    let refreshToken = ''
-    let clientId = ''
+    let params: Record<string, any> = {}
 
     const contentType = c.req.header('Content-Type') || ''
     if (contentType.includes('application/json')) {
-      const json = await c.req.json().catch(() => ({}))
-      grantType = json.grant_type
-      code = json.code
-      redirectUri = json.redirect_uri
-      refreshToken = json.refresh_token
-      clientId = json.client_id
+      params = await c.req.json().catch(() => ({}))
     } else {
-      const body: Record<string, any> = await c.req.parseBody().catch(() => ({}))
-      grantType = body['grant_type'] as string
-      code = body['code'] as string
-      redirectUri = body['redirect_uri'] as string
-      refreshToken = body['refresh_token'] as string
-      clientId = body['client_id'] as string
+      params = await c.req.parseBody().catch(() => ({}))
     }
 
-    // Also check query params as fallback
-    if (!grantType) grantType = c.req.query('grant_type') || ''
-    if (!code) code = c.req.query('code') || ''
-    if (!redirectUri) redirectUri = c.req.query('redirect_uri') || ''
+    const read = (key: string) => ((params[key] as string) || c.req.query(key) || '').toString()
+    const grantType = read('grant_type')
+    const code = read('code')
+    const redirectUri = read('redirect_uri')
+    const refreshToken = read('refresh_token')
+    const codeVerifier = read('code_verifier')
+
+    c.header('Cache-Control', 'no-store')
+    c.header('Pragma', 'no-cache')
 
     if (grantType === 'authorization_code') {
       if (!code) {
@@ -425,6 +468,30 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
           { error: 'invalid_grant', error_description: 'Code is invalid or expired' },
           400
         )
+      }
+
+      if (redirectUri && payload.redirectUri && redirectUri !== payload.redirectUri) {
+        return c.json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' }, 400)
+      }
+
+      // PKCE verification (RFC 7636)
+      if (payload.codeChallenge) {
+        if (!codeVerifier) {
+          return c.json(
+            { error: 'invalid_request', error_description: 'Missing code_verifier' },
+            400
+          )
+        }
+        const expected =
+          (payload.codeChallengeMethod || 'plain').toUpperCase() === 'S256'
+            ? await sha256Base64Url(codeVerifier)
+            : codeVerifier
+        if (expected !== payload.codeChallenge) {
+          return c.json(
+            { error: 'invalid_grant', error_description: 'PKCE verification failed' },
+            400
+          )
+        }
       }
 
       // Generate long-lived session token (30 days)
@@ -497,7 +564,8 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
     })
   })
 
-  // 5. OAuth Server Metadata / OIDC Discovery
+  // 5. OAuth Server Metadata / OIDC Discovery (RFC 8414)
+  const SCOPES = ['read', 'write']
   const getDiscovery = (c: Context<{ Bindings: Env }>) => {
     const origin = new URL(c.req.url).origin
     return {
@@ -505,15 +573,80 @@ export function registerOAuthRoutes(app: Hono<{ Bindings: Env }>) {
       authorization_endpoint: `${origin}/oauth/authorize`,
       token_endpoint: `${origin}/oauth/token`,
       userinfo_endpoint: `${origin}/oauth/userinfo`,
+      registration_endpoint: `${origin}/oauth/register`,
       response_types_supported: ['code'],
+      response_modes_supported: ['query'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic', 'none'],
-      scopes_supported: ['read', 'write']
+      code_challenge_methods_supported: ['S256', 'plain'],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
+      scopes_supported: SCOPES,
+      subject_types_supported: ['public'],
+      id_token_signing_alg_values_supported: ['HS256'],
+      service_documentation: `${origin}/mcp.json`
     }
   }
 
-  app.get('/.well-known/oauth-authorization-server', c => c.json(getDiscovery(c)))
-  app.get('/.well-known/openid-configuration', c => c.json(getDiscovery(c)))
+  // Some MCP clients append the resource path to the well-known URL (e.g. /.well-known/oauth-authorization-server/mcp)
+  for (const path of [
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/oauth-authorization-server/*',
+    '/.well-known/openid-configuration',
+    '/.well-known/openid-configuration/*',
+    '/mcp/.well-known/oauth-authorization-server',
+    '/mcp/.well-known/openid-configuration'
+  ]) {
+    app.get(path, c => c.json(getDiscovery(c)))
+  }
+
+  // Protected Resource Metadata (RFC 9728) — tells MCP clients (ChatGPT) where to log in
+  const getProtectedResource = (c: Context<{ Bindings: Env }>) => {
+    const origin = new URL(c.req.url).origin
+    return {
+      resource: `${origin}/mcp`,
+      authorization_servers: [origin],
+      scopes_supported: SCOPES,
+      bearer_methods_supported: ['header'],
+      resource_name: 'HeyForm',
+      resource_documentation: `${origin}/mcp.json`
+    }
+  }
+
+  for (const path of [
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/oauth-protected-resource/*',
+    '/mcp/.well-known/oauth-protected-resource'
+  ]) {
+    app.get(path, c => c.json(getProtectedResource(c)))
+  }
+
+  // Dynamic Client Registration (RFC 7591) — lets ChatGPT register itself, no client ID needed
+  app.post('/oauth/register', async c => {
+    const origin = new URL(c.req.url).origin
+    const body: Record<string, any> = await c.req.json().catch(() => ({}))
+    const clientId = 'heyform_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+    const authMethod: string = body.token_endpoint_auth_method || 'none'
+    const isPublic = authMethod === 'none'
+
+    return c.json(
+      {
+        client_id: clientId,
+        ...(isPublic
+          ? {}
+          : {
+              client_secret: 'secret_' + crypto.randomUUID().replace(/-/g, ''),
+              client_secret_expires_at: 0
+            }),
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+        client_name: body.client_name || 'ChatGPT',
+        redirect_uris: body.redirect_uris || [`${origin}/oauth/callback`],
+        grant_types: body.grant_types || ['authorization_code', 'refresh_token'],
+        response_types: body.response_types || ['code'],
+        token_endpoint_auth_method: authMethod,
+        scope: body.scope || SCOPES.join(' ')
+      },
+      201
+    )
+  })
 
   // 6. Direct Connect Flow (No Client ID or Secrets needed)
   app.get('/connect', async c => {

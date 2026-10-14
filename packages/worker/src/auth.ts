@@ -149,6 +149,11 @@ export interface OAuthCodePayload {
   redirectUri: string
   expiresAt: number
   scope?: string
+  // PKCE (RFC 7636)
+  codeChallenge?: string
+  codeChallengeMethod?: string
+  // Resource indicator (RFC 8707)
+  resource?: string
 }
 
 export async function createOAuthCode(payload: OAuthCodePayload, secret: string): Promise<string> {

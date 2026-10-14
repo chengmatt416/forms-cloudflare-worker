@@ -459,13 +459,18 @@ async function handleMcpRpc(
   const { jsonrpc, id, method, params } = reqBody || {}
 
   if (method === 'initialize') {
+    const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
+    const requested = params?.protocolVersion
+    const protocolVersion = SUPPORTED_VERSIONS.includes(requested)
+      ? requested
+      : SUPPORTED_VERSIONS[0]
     return {
       status: 200,
       body: {
         jsonrpc: '2.0',
         id,
         result: {
-          protocolVersion: '2024-11-05',
+          protocolVersion,
           capabilities: {
             tools: { listChanged: false },
             resources: { subscribe: false, listChanged: false },
@@ -473,15 +478,18 @@ async function handleMcpRpc(
           },
           serverInfo: {
             name: 'heyform',
+            title: 'HeyForm',
             version: '1.0.0'
-          }
+          },
+          instructions:
+            'HeyForm MCP server. Use these tools to manage workspaces, projects, forms, fields, publishing, submissions and analytics for the signed-in HeyForm user.'
         }
       }
     }
   }
 
-  if (method === 'notifications/initialized') {
-    return { status: 204, body: null }
+  if (typeof method === 'string' && method.startsWith('notifications/')) {
+    return { status: 202, body: null }
   }
 
   if (method === 'ping') {
@@ -617,38 +625,58 @@ async function handleMcpRpc(
 }
 
 export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
-  // 1. Direct MCP JSON-RPC Endpoint (POST /mcp)
-  app.post('/mcp', async c => {
+  // OAuth-only: every MCP request must carry a Bearer token. Unauthenticated requests get a
+  // 401 whose WWW-Authenticate header points at the RFC 9728 protected-resource metadata, which
+  // is how ChatGPT discovers the authorization server, registers itself (DCR) and opens the login page.
+  const unauthorized = (c: Context<{ Bindings: Env }>, id: any = null) => {
     const origin = new URL(c.req.url).origin
-    const user = await getAuthUser(c)
-    const body = await c.req.json().catch(() => ({}))
+    c.header(
+      'WWW-Authenticate',
+      `Bearer realm="HeyForm", resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="read write"`
+    )
+    return c.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32001, message: 'Unauthorized. OAuth 2.0 authorization required.' }
+      },
+      401
+    )
+  }
 
-    // Handle initial unauthenticated ping or initialize
-    if (!user && body?.method && !['initialize', 'ping', 'tools/list'].includes(body.method)) {
-      c.header(
-        'WWW-Authenticate',
-        `Bearer realm="HeyForm", authorization_uri="${origin}/oauth/authorize", token_uri="${origin}/oauth/token"`
-      )
-      return c.json(
-        {
-          jsonrpc: '2.0',
-          id: body?.id,
-          error: {
-            code: -32001,
-            message: 'Unauthorized. OAuth 2.0 authorization required.'
-          }
-        },
-        401
-      )
+  const handleRpcPost = async (c: Context<{ Bindings: Env }>) => {
+    const origin = new URL(c.req.url).origin
+    const body = await c.req.json().catch(() => ({}))
+    const user = await getAuthUser(c)
+
+    if (!user) {
+      return unauthorized(c, body?.id ?? null)
     }
 
     const { status, body: rpcResponse } = await handleMcpRpc(body, user, c.env, origin)
-    if (status === 204) return new Response(null, { status: 204 })
+    // JSON-RPC notifications have no response body (Streamable HTTP spec: 202 Accepted)
+    if (status === 204 || status === 202) return new Response(null, { status: 202 })
     return c.json(rpcResponse, status as any)
+  }
+
+  // 1. Streamable HTTP MCP Endpoint (POST /mcp)
+  app.post('/mcp', handleRpcPost)
+
+  // Streamable HTTP: GET /mcp opens an optional server->client stream. We don't push
+  // server-initiated messages, so authenticated clients get 405 (allowed by the spec).
+  app.get('/mcp', async c => {
+    const user = await getAuthUser(c)
+    if (!user) return unauthorized(c)
+    return c.text('Method Not Allowed', 405, { Allow: 'POST' })
   })
 
-  // 2. MCP Server-Sent Events Endpoint (GET /sse and GET /mcp/sse)
+  app.delete('/mcp', c => new Response(null, { status: 204 }))
+
+  // 2. Legacy MCP Server-Sent Events Endpoint (GET /sse and GET /mcp/sse)
   const handleSse = async (c: Context<{ Bindings: Env }>) => {
+    const user = await getAuthUser(c)
+    if (!user) return unauthorized(c)
+
     const origin = new URL(c.req.url).origin
     const sessionId = crypto.randomUUID()
     const stream = new ReadableStream({
@@ -670,18 +698,9 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.get('/sse', handleSse)
   app.get('/mcp/sse', handleSse)
-  app.get('/mcp', handleSse)
 
   // 3. MCP Message Endpoint for SSE sessions (POST /mcp/messages)
-  app.post('/mcp/messages', async c => {
-    const origin = new URL(c.req.url).origin
-    const user = await getAuthUser(c)
-    const body = await c.req.json().catch(() => ({}))
-
-    const { status, body: rpcResponse } = await handleMcpRpc(body, user, c.env, origin)
-    if (status === 204) return new Response(null, { status: 204 })
-    return c.json(rpcResponse, status as any)
-  })
+  app.post('/mcp/messages', handleRpcPost)
 
   // 4. MCP Manifest / Discovery Metadata (GET /mcp.json)
   app.get('/mcp.json', c => {

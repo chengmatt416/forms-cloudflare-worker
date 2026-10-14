@@ -20,7 +20,16 @@ app.use(
     origin: origin => origin || '*',
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Device-Id', 'x-anonymous-id', 'user-lang']
+    allowHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Device-Id',
+      'x-anonymous-id',
+      'user-lang',
+      'Mcp-Session-Id',
+      'Mcp-Protocol-Version'
+    ],
+    exposeHeaders: ['WWW-Authenticate', 'Mcp-Session-Id']
   })
 )
 
