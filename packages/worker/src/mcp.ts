@@ -504,15 +504,26 @@ async function handleMcpRpc(
 
   if (method === 'tools/call') {
     if (!user) {
+      const sessionId = 'hf_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+      await env.DB.prepare(
+        "INSERT INTO connected_sessions (id, status, created_at) VALUES (?, 'pending', ?)"
+      )
+        .bind(sessionId, Date.now())
+        .run()
+
+      const loginUrl = `${origin}/connect?session=${sessionId}`
       return {
-        status: 401,
+        status: 200,
         body: {
           jsonrpc: '2.0',
           id,
-          error: {
-            code: -32001,
-            message:
-              'Authentication required. Please authenticate via OAuth 2.0 at /oauth/authorize'
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: `You are not logged in to HeyForm yet. Please click this link to log in: [Log in to HeyForm](${loginUrl})\n\nOnce logged in, please repeat your request!`
+              }
+            ]
           }
         }
       }
@@ -639,16 +650,6 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
   // 2. MCP Server-Sent Events Endpoint (GET /sse and GET /mcp/sse)
   const handleSse = async (c: Context<{ Bindings: Env }>) => {
     const origin = new URL(c.req.url).origin
-    const user = await getAuthUser(c)
-
-    if (!user) {
-      c.header(
-        'WWW-Authenticate',
-        `Bearer realm="HeyForm", authorization_uri="${origin}/oauth/authorize", token_uri="${origin}/oauth/token"`
-      )
-      return c.text('Unauthorized: OAuth Bearer token required.', 401)
-    }
-
     const sessionId = crypto.randomUUID()
     const stream = new ReadableStream({
       start(controller) {
