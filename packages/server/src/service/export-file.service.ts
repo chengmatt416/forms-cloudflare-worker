@@ -65,9 +65,15 @@ export class ExportFileService {
         value: (submission: SubmissionModel) => {
           const answer = submission.answers.find(answer => answer.id === field.id)
 
-          return helper.isEmpty(answer)
-            ? ''
-            : neutralizeSpreadsheetFormula(this.parseAnswer(answer))
+          if (helper.isEmpty(answer)) {
+            return ''
+          }
+
+          if (!answer.properties && field.properties) {
+            answer.properties = field.properties
+          }
+
+          return neutralizeSpreadsheetFormula(this.parseAnswer(answer))
         }
       })),
       ...selectedHiddenFields.map(hiddenField => ({
@@ -116,6 +122,21 @@ export class ExportFileService {
               result = `${prefix.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`
             }
           }
+        }
+        break
+
+      case FieldKindEnum.SIGNATURE:
+        if (helper.isObject(value)) {
+          const auditId = (value as any)?.audit?.auditId
+          if (auditId) {
+            result = `[Signature Signed - Audit #${auditId}]`
+          } else {
+            result = '[Signature Signed]'
+          }
+        } else if (helper.isString(value) && value.startsWith('data:image/')) {
+          result = '[Signature Signed]'
+        } else if (helper.isValid(value)) {
+          result = String(value)
         }
         break
 

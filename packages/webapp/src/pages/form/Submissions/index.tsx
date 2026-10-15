@@ -237,11 +237,17 @@ export default function FormSubmissions() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       const disposition = res.headers.get('Content-Disposition')
-      let filename = 'submissions.csv'
-      if (disposition && disposition.includes('filename')) {
-        const match = disposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;\r\n"']*)['"]?/i)
-        if (match && match[1]) {
-          filename = decodeURIComponent(match[1].replace(/['"]/g, ''))
+      const dateStr = new Date().toISOString().slice(0, 10)
+      let filename = `${form?.name || 'submissions'}-${dateStr}.csv`
+      if (disposition) {
+        const utf8Match = disposition.match(/filename\*=UTF-8''([^;\r\n]+)/i)
+        if (utf8Match && utf8Match[1]) {
+          filename = decodeURIComponent(utf8Match[1].replace(/['"]/g, ''))
+        } else {
+          const asciiMatch = disposition.match(/filename="?([^";\r\n]+)"?/i)
+          if (asciiMatch && asciiMatch[1]) {
+            filename = decodeURIComponent(asciiMatch[1].replace(/['"]/g, ''))
+          }
         }
       }
       a.href = url

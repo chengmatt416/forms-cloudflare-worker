@@ -142,7 +142,7 @@ Endpoints:
 
 ---
 
-## Available Tools (58 Tools)
+## Available Tools (69 Tools)
 
 ### Account & Authentication
 - `heyform_login`: Authenticate with email and password to start a session.
@@ -174,7 +174,7 @@ Endpoints:
 - `heyform_list_forms`: List forms in a project (filter by normal/trash, search keyword).
 - `heyform_get_form`: Get full details of a form (questions, drafts, settings, theme, logic).
 - `heyform_create_form`: Create a new form (Survey, Quiz, Contact).
-- `heyform_update_form`: Update form settings (active, password, expiration, time limits, spam filter, redirection, email alerts).
+- `heyform_update_form`: Update form settings (title, description, active, password, expiration, time limits, spam filter, redirection, email alerts).
 - `heyform_duplicate_form`: Duplicate an existing form with a new title.
 - `heyform_publish_form`: Publish drafts to make changes live for respondents.
 - `heyform_move_form`: Move form to another project.
@@ -184,16 +184,31 @@ Endpoints:
 - `heyform_delete_form`: Permanently delete a form.
 - `heyform_search_forms`: Search forms by keyword.
 
-### Question Fields & Form Schemas
-- `heyform_add_field`: Add a question or screen (`short_text`, `long_text`, `number`, `multiple_choice`, `picture_choice`, `yes_no`, `email`, `phone_number`, `url`, `rating`, `opinion_scale`, `date`, `date_range`, `time`, `file_upload`, `address`, `full_name`, `legal_terms`, `signature`, `statement`, `welcome`, `thank_you`).
-- `heyform_update_field`: Update a question's title, description, choices, validations, or properties.
-- `heyform_delete_field`: Delete a question from form drafts.
-- `heyform_reorder_fields`: Reorder questions in form drafts.
+### Question Fields & Reordering
+- `heyform_add_field`: Add a question or screen (`short_text`, `long_text`, `number`, `multiple_choice`, `picture_choice`, `yes_no`, `email`, `phone_number`, `url`, `rating`, `opinion_scale`, `date`, `date_range`, `time`, `file_upload`, `address`, `full_name`, `legal_terms`, `signature`, `statement`, `welcome`, `thank_you`, `group`).
+- `heyform_batch_add_fields`: Add multiple questions to a form in one operation.
+- `heyform_update_field`: Update question title, description, required status, choices, kind, validations, layout, or properties.
+- `heyform_delete_field`: Delete a question by fieldId or positionIndex (automatically cleans up referencing conditional logic).
+- `heyform_batch_delete_fields`: Delete multiple questions in one operation.
+- `heyform_duplicate_field`: Duplicate an existing question with all its options and settings.
+- `heyform_move_field`: Move a question to a target index, or directly before/after another question.
+- `heyform_reorder_fields`: Reorder all questions in form drafts given the complete ordered list of field IDs.
 - `heyform_update_form_schemas`: Replace the entire drafts array in bulk.
+
+### Conditional Logic & Branching
+- `heyform_get_logics`: Inspect all conditional branching and jump rules with human-readable explanations.
+- `heyform_set_field_logic`: Configure conditional jump or calculation logic for a question (supports choice label matching).
+- `heyform_add_logic_rule`: Add a single conditional jump or calculation rule to a question.
+- `heyform_delete_logic`: Delete conditional logic rules for a question (or a specific rule payload ID).
+- `heyform_clear_logics`: Clear all conditional logic rules on a form.
+- `heyform_update_logics`: Update the complete conditional logic array for a form.
+
+### Theme, Variables & Hidden Fields
 - `heyform_update_theme`: Customize colors, fonts, background image, roundness, brightness.
-- `heyform_update_logics`: Set conditional branching and jump logic rules.
 - `heyform_update_variables`: Configure custom or score calculation variables.
-- `heyform_update_hidden_fields`: Configure hidden tracking parameters.
+- `heyform_set_variable`: Add or update a score calculation or quiz variable.
+- `heyform_delete_variable`: Delete a variable from a form.
+- `heyform_update_hidden_fields`: Configure hidden tracking parameters (e.g. UTM parameters, user_id).
 
 ### Submissions & Analytics
 - `heyform_list_submissions`: Query submissions with pagination, category filter (inbox, starred, trash, spam), search.

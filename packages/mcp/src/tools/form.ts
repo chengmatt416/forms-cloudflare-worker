@@ -75,6 +75,21 @@ export const updateFormTool: McpTool = {
   parameters: z.object({
     formId: z.string().describe('The ID of the form to update'),
     name: z.string().optional().describe('Updated title for the form'),
+    description: z.string().optional().describe('Updated description for the form'),
+    interactiveMode: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe('Interactive mode: 1 = General, 2 = Interactive, 3 = Popup'),
+    kind: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe('Form kind: 1 = Survey, 2 = Quiz, 3 = Contact'),
     active: z.boolean().optional().describe('Whether the form is active/open to submissions'),
     enableExpirationDate: z.boolean().optional().describe('Enable automatic expiration date'),
     closedAt: z

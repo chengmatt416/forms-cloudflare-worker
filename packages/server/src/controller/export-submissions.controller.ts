@@ -28,19 +28,23 @@ export class ExportSubmissionsController {
     }
 
     const submissions = await this.submissionService.findAllByForm(input.formId)
-    if (submissions.length < 1) {
-      throw new BadRequestException('The submissions does not exist')
-    }
 
     const data = await this.exportFileService.csv(
       flattenFields(form.fields),
       form.hiddenFields,
-      submissions
+      submissions || []
     )
     const dateStr = date().format('YYYY-MM-DD')
-    const filename = `${encodeURIComponent(form.name)}-${dateStr}.csv`
+    const safeFormName = (form.name || 'submissions').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5-]/g, '_')
+    const filename = `${safeFormName}-${dateStr}.csv`
+    const encodedFilename = encodeURIComponent(filename)
 
-    res.header('Content-Disposition', `attachment; filename="${filename}"`)
-    res.send(data)
+    res.header('Content-Type', 'text/csv; charset=utf-8')
+    res.header(
+      'Content-Disposition',
+      `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`
+    )
+    res.header('Access-Control-Expose-Headers', 'Content-Disposition')
+    res.send('\uFEFF' + data)
   }
 }

@@ -1231,6 +1231,16 @@ test.describe('Live Production E2E Full User Journey', () => {
     await page.waitForLoadState('networkidle')
     const downloadBtn = page.locator('button:has(svg.tabler-icon-download)').first()
     await expect(downloadBtn).toBeVisible({ timeout: 10000 })
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 15000 }),
+      downloadBtn.click()
+    ])
+    expect(download.suggestedFilename()).toContain('.csv')
+    const downloadPath = await download.path()
+    const downloadedText = fs.readFileSync(downloadPath, 'utf-8')
+    expect(downloadedText.startsWith('\uFEFF')).toBe(true)
+    expect(downloadedText).toContain('#')
   })
 
   test('19. Specified Default Respondent Interface Language & Mobile Viewport Redesign Verification', async ({

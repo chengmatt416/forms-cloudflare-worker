@@ -21,8 +21,8 @@ import {
 import {
   helper,
   hs,
-  ms,
   isDateExpired,
+  ms,
   nanoid,
   parseNumber,
   random,
@@ -235,7 +235,14 @@ export class AuthService {
   }
 
   getSession(req: any): any {
-    const cookie = req.cookies[COOKIE_SESSION_NAME]
+    let cookie = req.cookies?.[COOKIE_SESSION_NAME]
+
+    if (!cookie) {
+      const authHeader = req.headers?.['authorization'] || req.headers?.['x-session-token']
+      if (typeof authHeader === 'string' && authHeader.trim().length > 0) {
+        cookie = authHeader.replace(/^Bearer\s+/i, '').trim()
+      }
+    }
 
     try {
       return aesDecryptObject(cookie, SESSION_KEY)

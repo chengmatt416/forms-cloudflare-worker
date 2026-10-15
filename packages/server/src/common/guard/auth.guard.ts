@@ -27,8 +27,9 @@ export class AuthGuard implements CanActivate {
       req = context.switchToHttp().getRequest()
     }
 
-    const deviceId = req.get('x-device-id') || req.cookies[COOKIE_DEVICE_ID_NAME]
     const user = this.authService.getSession(req)
+    const deviceId =
+      req.get('x-device-id') || req.cookies?.[COOKIE_DEVICE_ID_NAME] || user?.deviceId
 
     if (helper.isValid(user)) {
       if (deviceId !== user.deviceId) {

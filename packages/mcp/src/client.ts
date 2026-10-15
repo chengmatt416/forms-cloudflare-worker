@@ -9,6 +9,159 @@ export interface HeyFormClientOptions {
   apiKey?: string
 }
 
+export function normalizeOperator(op?: string): string {
+  if (!op) return 'addition'
+  const map: Record<string, string> = {
+    '+': 'addition',
+    '-': 'subtraction',
+    '*': 'multiplication',
+    '/': 'division',
+    '=': 'assignment',
+    add: 'addition',
+    subtract: 'subtraction',
+    multiply: 'multiplication',
+    divide: 'division',
+    assign: 'assignment',
+    addition: 'addition',
+    subtraction: 'subtraction',
+    multiplication: 'multiplication',
+    division: 'division',
+    assignment: 'assignment'
+  }
+  return map[String(op).toLowerCase()] || op
+}
+
+export function normalizeComparison(comp?: string): string {
+  if (!comp) return 'is'
+  const map: Record<string, string> = {
+    '=': 'is',
+    '==': 'is',
+    '===': 'is',
+    eq: 'is',
+    equals: 'is',
+    is: 'is',
+    '!=': 'is_not',
+    '!==': 'is_not',
+    neq: 'is_not',
+    not_equal: 'not_equal',
+    is_not: 'is_not',
+    '>': 'greater_than',
+    gt: 'greater_than',
+    greater_than: 'greater_than',
+    '<': 'less_than',
+    lt: 'less_than',
+    less_than: 'less_than',
+    '>=': 'greater_or_equal_than',
+    gte: 'greater_or_equal_than',
+    greater_or_equal_than: 'greater_or_equal_than',
+    '<=': 'less_or_equal_than',
+    lte: 'less_or_equal_than',
+    less_or_equal_than: 'less_or_equal_than',
+    contains: 'contains',
+    does_not_contain: 'does_not_contain',
+    starts_with: 'starts_with',
+    ends_with: 'ends_with',
+    is_empty: 'is_empty',
+    is_not_empty: 'is_not_empty',
+    between: 'between',
+    matches_regex: 'matches_regex',
+    is_before: 'is_before',
+    is_after: 'is_after'
+  }
+  return map[String(comp).toLowerCase()] || comp
+}
+
+export function normalizeLogics(logics: any[]): any[] {
+  if (!Array.isArray(logics)) return []
+  return logics.map((item: any) => {
+    const fieldId = item.fieldId || item.id
+    let payloads: any[] = []
+
+    if (Array.isArray(item.payloads)) {
+      payloads = item.payloads
+    } else if (Array.isArray(item.rules)) {
+      payloads = item.rules.map((rule: any) => ({
+        id: rule.id || crypto.randomBytes(6).toString('hex'),
+        condition: {
+          comparison: normalizeComparison(rule.comparison),
+          expected: rule.expected !== undefined ? rule.expected : rule.value,
+          ref: rule.ref
+        },
+        action: {
+          kind: (
+            rule.actionKind ||
+            rule.kind ||
+            (rule.variable ? 'calculate' : 'navigate')
+          ).toLowerCase(),
+          fieldId: rule.targetFieldId || rule.fieldId,
+          variable: rule.variable,
+          operator: normalizeOperator(rule.operator),
+          value: rule.value,
+          ref: rule.actionRef
+        }
+      }))
+    } else if (item.condition && item.action) {
+      payloads = [
+        {
+          id: item.id || crypto.randomBytes(6).toString('hex'),
+          condition: item.condition,
+          action: item.action
+        }
+      ]
+    } else if (Array.isArray(item.conditions) && Array.isArray(item.actions)) {
+      payloads = item.conditions.map((cond: any, idx: number) => {
+        const act = item.actions[idx] || item.actions[0] || {}
+        return {
+          id: crypto.randomBytes(6).toString('hex'),
+          condition: {
+            comparison: normalizeComparison(cond.comparison),
+            expected: cond.value !== undefined ? cond.value : cond.expected,
+            ref: cond.ref
+          },
+          action: {
+            kind: act.action === 'calculate' ? 'calculate' : 'navigate',
+            fieldId: act.payload?.to || act.payload?.fieldId || act.fieldId,
+            variable: act.payload?.variable || act.variable,
+            operator: normalizeOperator(act.payload?.operator || act.operator),
+            value: act.payload?.value !== undefined ? act.payload.value : act.value
+          }
+        }
+      })
+    }
+
+    const cleanPayloads = payloads.map((p: any) => {
+      const isCalculate = (p.action?.kind || p.action?.action || '').toLowerCase() === 'calculate'
+      return {
+        id: p.id || crypto.randomBytes(6).toString('hex'),
+        condition: {
+          comparison: normalizeComparison(p.condition?.comparison),
+          expected: p.condition?.expected !== undefined ? p.condition.expected : p.condition?.value,
+          ref: p.condition?.ref
+        },
+        action: {
+          kind: isCalculate ? 'calculate' : 'navigate',
+          fieldId: !isCalculate
+            ? p.action?.fieldId || p.action?.targetFieldId || p.action?.payload?.to || undefined
+            : undefined,
+          variable: isCalculate
+            ? p.action?.variable || p.action?.payload?.variable || undefined
+            : undefined,
+          operator: isCalculate
+            ? normalizeOperator(p.action?.operator || p.action?.payload?.operator)
+            : undefined,
+          value: p.action?.value !== undefined ? p.action.value : p.action?.payload?.value,
+          ref: p.action?.ref
+        }
+      }
+    })
+
+    return {
+      fieldId,
+      payloads: cleanPayloads
+    }
+  })
+}
+
 export class HeyFormClient {
   public apiUrl: string
   public email?: string
@@ -702,12 +855,18 @@ export class HeyFormClient {
   }
 
   public async updateLogics(input: { formId: string; logics: any[] }): Promise<boolean> {
+    const normalizedLogics = normalizeLogics(input.logics)
     const query = `
       mutation updateFormLogics($input: UpdateFormLogicsInput!) {
         updateFormLogics(input: $input)
       }
     `
-    const data = await this.request(query, { input })
+    const data = await this.request(query, {
+      input: {
+        formId: input.formId,
+        logics: normalizedLogics
+      }
+    })
     return data.updateFormLogics
   }
 
